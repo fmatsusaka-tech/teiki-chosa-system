@@ -12,17 +12,23 @@ const orchardVarieties: Record<string, string> = {
   徳田: "早生",
 };
 
+const orchardNames = new Set(Object.keys(orchardVarieties).map(normalizeOrchard));
 const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ"]);
-const datePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
+const fullDatePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
+const shortDatePattern = /^\d{1,2}[/-]\d{1,2}$/;
 const numberPattern = /^-?\d+(?:\.\d+)?$/;
 
-function normalizeDate(value: string): string {
-  const [year, month, day] = value.split(/[/-]/).map(Number);
+function normalizeDate(value: string, registeredAt: string): string {
+  const parts = value.split(/[/-]/).map(Number);
+  const [year, month, day] =
+    parts.length === 3
+      ? parts
+      : [new Date(registeredAt).getUTCFullYear(), parts[0], parts[1]];
   return new Date(Date.UTC(year, month - 1, day)).toISOString();
 }
 
 function normalizeOrchard(value: string): string {
-  return value.replace(/[１-９]/g, (char) =>
+  return value.replace(/[０-９]/g, (char) =>
     String.fromCharCode(char.charCodeAt(0) - 0xfee0),
   );
 }
@@ -44,6 +50,22 @@ function parseDiameter(raw: string): { value: number; warning?: string } {
   return { value: numeric };
 }
 
+function hasSugarAcidPair(tokens: string[]): boolean {
+  if (tokens.length < 3) return false;
+  const brixToken = tokens.at(-2) ?? "";
+  const acidityToken = tokens.at(-1) ?? "";
+  const brix = Number(brixToken);
+  const acidity = Number(acidityToken);
+
+  return (
+    (brixToken.includes(".") || acidityToken.includes(".")) &&
+    brix >= 4 &&
+    brix <= 30 &&
+    acidity >= 0 &&
+    acidity <= 10
+  );
+}
+
 export function parseSurveyMemo(
   sourceText: string,
   registeredAt = new Date().toISOString(),
@@ -56,6 +78,7 @@ export function parseSurveyMemo(
   let measuredAt = registeredAt;
   let currentOrchard = "";
   let currentTreatment = "";
+  let currentNotes: string[] = [];
   let numericLines: string[] = [];
   const records: SurveyRecord[] = [];
   const batchWarnings: string[] = [];
@@ -64,17 +87,10 @@ export function parseSurveyMemo(
     if (!currentOrchard || numericLines.length === 0) return;
 
     const warnings: string[] = [];
-    const values = numericLines.map(Number);
-
-    if (values.length < 3) {
-      batchWarnings.push(`${currentOrchard} は数値が不足しているため解析できませんでした`);
-      numericLines = [];
-      return;
-    }
-
-    const brix = values.at(-2) ?? null;
-    const acidity = values.at(-1) ?? null;
-    const diameterTokens = numericLines.slice(0, -2);
+    const sugarAcidPresent = hasSugarAcidPair(numericLines);
+    const brix = sugarAcidPresent ? Number(numericLines.at(-2)) : null;
+    const acidity = sugarAcidPresent ? Number(numericLines.at(-1)) : null;
+    const diameterTokens = sugarAcidPresent ? numericLines.slice(0, -2) : numericLines;
     const diametersMm = diameterTokens.map((token) => {
       const parsed = parseDiameter(token);
       if (parsed.warning) warnings.push(parsed.warning);
@@ -84,6 +100,10 @@ export function parseSurveyMemo(
     const variety = orchardVarieties[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
+    if (brix === null) warnings.push("糖度が未入力です");
+    if (acidity === null) warnings.push("酸度が未入力です");
+
+    const notes = [currentTreatment, ...currentNotes].filter(Boolean).join("・");
 
     records.push({
       measuredAt,
@@ -93,22 +113,24 @@ export function parseSurveyMemo(
       diametersMm,
       brix,
       acidity,
-      notes: currentTreatment,
+      notes,
       source: "text",
       confidence: warnings.length === 0 ? 1 : 0.8,
       warnings,
     });
 
     numericLines = [];
+    currentNotes = [];
   };
 
   for (const line of lines) {
-    if (datePattern.test(line)) {
-      measuredAt = normalizeDate(line);
+    if (fullDatePattern.test(line) || shortDatePattern.test(line)) {
+      measuredAt = normalizeDate(line, registeredAt);
       continue;
     }
 
     if (treatmentNames.has(line)) {
+      if (numericLines.length > 0) flush();
       currentTreatment = line;
       continue;
     }
@@ -118,9 +140,20 @@ export function parseSurveyMemo(
       continue;
     }
 
-    flush();
-    currentOrchard = normalizeOrchard(line);
-    currentTreatment = "";
+    const normalized = normalizeOrchard(line);
+    if (orchardNames.has(normalized)) {
+      flush();
+      currentOrchard = normalized;
+      currentTreatment = "";
+      currentNotes = [];
+      continue;
+    }
+
+    if (currentOrchard) {
+      currentNotes.push(line);
+    } else {
+      batchWarnings.push(`「${line}」を園地名として認識できませんでした`);
+    }
   }
 
   flush();
