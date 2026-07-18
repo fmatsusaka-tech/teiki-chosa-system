@@ -92,6 +92,78 @@ const memo = `2025/11/16
 11.2
 0.9`;
 
+const incompleteMemo = `11/16
+
+有中
+無処理区
+506
+504
+561
+570
+513
+572
+
+スキー
+602
+580
+607
+541
+562
+535
+
+ミヨビ
+501
+611
+473
+574
+596
+624
+
+吉川
+461
+570
+561
+571
+523
+573
+
+なる1
+546
+476
+601
+597
+622
+632
+
+なる2
+742
+724
+825
+715
+763
+800
+売り物サイズを検査
+
+上中島
+720
+617
+643
+683
+687
+622
+
+下町
+717
+614
+754
+730
+
+徳田
+734
+-681
+642
+543`;
+
 describe("parseSurveyMemo", () => {
   it("複数園地と処理区を9レコードに分割する", () => {
     const result = parseSurveyMemo(memo, "2026-07-18T07:00:00.000Z");
@@ -127,5 +199,33 @@ describe("parseSurveyMemo", () => {
     expect(shimomachi?.warnings).toContain("横径が4個です");
     expect(tokuda?.diametersMm).toEqual([73.4, 68.1, 64.2, 54.3]);
     expect(tokuda?.warnings.some((warning) => warning.includes("-681"))).toBe(true);
+  });
+
+  it("糖度と酸度が無い入力では横径を削らず未入力警告を付ける", () => {
+    const result = parseSurveyMemo(incompleteMemo, "2026-07-18T07:00:00.000Z");
+
+    expect(result.records).toHaveLength(9);
+    expect(result.records[0]).toMatchObject({
+      orchard: "有中",
+      notes: "無処理区",
+      diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
+      brix: null,
+      acidity: null,
+      measuredAt: "2026-11-16T00:00:00.000Z",
+    });
+    expect(result.records[0].warnings).toContain("糖度が未入力です");
+    expect(result.records[0].warnings).toContain("酸度が未入力です");
+
+    expect(result.records[1]).toMatchObject({
+      orchard: "有中",
+      notes: "スキー",
+      diametersMm: [60.2, 58, 60.7, 54.1, 56.2, 53.5],
+    });
+
+    expect(result.records[5]).toMatchObject({
+      orchard: "なる2",
+      notes: "売り物サイズを検査",
+      diametersMm: [74.2, 72.4, 82.5, 71.5, 76.3, 80],
+    });
   });
 });
