@@ -1,28 +1,15 @@
 "use client";
 
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import type { SurveyRecord } from "../domain/survey-record";
-
-const sampleMemo = `2025/11/16
-有中
-無処理区
-506
-504
-561
-570
-513
-572
-16.1
-1.0
-吉川
-528
-548
-552
-545
-542
-14.5
-0.7`;
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -37,6 +24,8 @@ function visibleWarnings(record: SurveyRecord): string[] {
   return record.warnings.filter((warning) => {
     if (warning === "糖度が未入力です" && record.brix !== null) return false;
     if (warning === "酸度が未入力です" && record.acidity !== null) return false;
+    if (warning.startsWith("横径が") && record.diametersMm.length >= 5) return false;
+    if (warning === "品種を特定できませんでした" && record.variety !== "未設定") return false;
     return true;
   });
 }
@@ -49,9 +38,26 @@ export function SurveyInputWorkspace() {
   const [photoNames, setPhotoNames] = useState<string[]>([]);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLElement>(null);
+  const hasAnalyzedRef = useRef(false);
 
   const warningCount = useMemo(
     () => records.filter((record) => visibleWarnings(record).length > 0).length,
+    [records],
+  );
+
+  const missingBrixCount = useMemo(
+    () => records.filter((record) => record.brix === null).length,
+    [records],
+  );
+
+  const missingAcidityCount = useMemo(
+    () => records.filter((record) => record.acidity === null).length,
+    [records],
+  );
+
+  const shortDiameterCount = useMemo(
+    () => records.filter((record) => record.diametersMm.length < 5).length,
     [records],
   );
 
@@ -59,25 +65,57 @@ export function SurveyInputWorkspace() {
     () =>
       records.filter(
         (record, index) =>
-          selectedRows.has(index) && (record.brix === null || record.acidity === null),
+          selectedRows.has(index) &&
+          (record.brix === null ||
+            record.acidity === null ||
+            record.orchard.trim() === "" ||
+            record.variety.trim() === "" ||
+            record.variety === "未設定"),
       ).length,
     [records, selectedRows],
   );
 
-  const analyzeText = () => {
-    const parsed = parseSurveyMemo(sourceText);
+  const analyzeText = (text = sourceText) => {
+    if (!text.trim()) {
+      setRecords([]);
+      setSelectedRows(new Set());
+      setExpandedRows(new Set());
+      hasAnalyzedRef.current = false;
+      return;
+    }
+
+    const parsed = parseSurveyMemo(text);
     setRecords(parsed.records);
     setSelectedRows(new Set(parsed.records.map((_, index) => index)));
     setExpandedRows(
       new Set(
         parsed.records
           .map((record, index) =>
-            record.brix === null || record.acidity === null ? index : -1,
+            record.brix === null ||
+            record.acidity === null ||
+            record.variety === "未設定"
+              ? index
+              : -1,
           )
           .filter((index) => index >= 0),
       ),
     );
+
+    if (!hasAnalyzedRef.current && parsed.records.length > 0) {
+      hasAnalyzedRef.current = true;
+      requestAnimationFrame(() =>
+        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
   };
+
+  useEffect(() => {
+    if (!sourceText.trim()) return;
+    const timer = window.setTimeout(() => analyzeText(sourceText), 700);
+    return () => window.clearTimeout(timer);
+    // sourceTextが変わったときだけ再解析する
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceText]);
 
   const toggleExpanded = (index: number) => {
     setExpandedRows((current) => {
@@ -97,19 +135,58 @@ export function SurveyInputWorkspace() {
     });
   };
 
+  const updateRecord = <K extends keyof SurveyRecord>(
+    index: number,
+    field: K,
+    value: SurveyRecord[K],
+  ) => {
+    setRecords((current) =>
+      current.map((record, recordIndex) =>
+        recordIndex === index ? { ...record, [field]: value } : record,
+      ),
+    );
+  };
+
   const updateMeasurement = (
     index: number,
     field: "brix" | "acidity",
     rawValue: string,
   ) => {
     const value = rawValue === "" ? null : Number(rawValue);
+    updateRecord(index, field, Number.isFinite(value) ? value : null);
+  };
+
+  const updateDiameter = (recordIndex: number, diameterIndex: number, rawValue: string) => {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+
     setRecords((current) =>
-      current.map((record, recordIndex) =>
-        recordIndex === index
-          ? { ...record, [field]: Number.isFinite(value) ? value : null }
-          : record,
-      ),
+      current.map((record, index) => {
+        if (index !== recordIndex) return record;
+        const diametersMm = [...record.diametersMm];
+        diametersMm[diameterIndex] = value;
+        return { ...record, diametersMm };
+      }),
     );
+  };
+
+  const focusNextField = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const fields = Array.from(
+      document.querySelectorAll<HTMLInputElement>("[data-entry-field='true']"),
+    ).filter((field) => !field.disabled);
+    const currentIndex = fields.indexOf(event.currentTarget);
+    fields[currentIndex + 1]?.focus();
+    fields[currentIndex + 1]?.select();
+  };
+
+  const clearInput = () => {
+    setSourceText("");
+    setRecords([]);
+    setSelectedRows(new Set());
+    setExpandedRows(new Set());
+    hasAnalyzedRef.current = false;
   };
 
   const handlePhotos = (event: ChangeEvent<HTMLInputElement>) => {
@@ -126,26 +203,26 @@ export function SurveyInputWorkspace() {
             <p className="step">STEP 1</p>
             <h2 id="input-title">調査内容を入力</h2>
           </div>
-          <span className="status">入力支援モジュール</span>
+          <span className="status">自動解析</span>
         </div>
 
         <textarea
           aria-label="調査内容"
           value={sourceText}
           onChange={(event) => setSourceText(event.target.value)}
-          placeholder="複数園地のメモを、そのまま貼り付けてください"
+          placeholder="複数園地のメモを、そのまま貼り付けてください。入力後、自動で解析します。"
           rows={10}
         />
 
         <div className="input-actions">
-          <button className="primary-button" type="button" onClick={analyzeText}>
-            テキストを解析する
-          </button>
           <button type="button" onClick={() => cameraInputRef.current?.click()}>
             その場で撮影
           </button>
           <button type="button" onClick={() => libraryInputRef.current?.click()}>
             写真を選択
+          </button>
+          <button type="button" disabled={!sourceText} onClick={clearInput}>
+            入力を消す
           </button>
         </div>
 
@@ -169,17 +246,21 @@ export function SurveyInputWorkspace() {
         {photoNames.length > 0 && (
           <div className="temporary-photo-note" role="status">
             <strong>{photoNames.length}枚を一時選択中</strong>
-            <span>画像は登録後に保存せず破棄します。画像解析処理は次工程で接続します。</span>
+            <span>写真の読み取り機能は次の開発工程で接続します。</span>
           </div>
         )}
       </section>
 
       {records.length > 0 && (
-        <section className="panel results-panel" aria-labelledby="results-title">
+        <section
+          ref={resultsRef}
+          className="panel results-panel"
+          aria-labelledby="results-title"
+        >
           <div className="section-heading results-heading">
             <div>
               <p className="step">STEP 2</p>
-              <h2 id="results-title">解析結果を確認</h2>
+              <h2 id="results-title">解析結果を確認・修正</h2>
             </div>
             <div className="summary-badges">
               <span className="status">全{records.length}件</span>
@@ -187,10 +268,11 @@ export function SurveyInputWorkspace() {
             </div>
           </div>
 
-          {incompleteSelectedCount > 0 && (
-            <div className="required-input-notice" role="alert">
-              <strong>糖度・酸度が不足しています</strong>
-              <span>黄色の欄へ値を追加してください。未入力のレコードは登録できません。</span>
+          {(missingBrixCount > 0 || missingAcidityCount > 0 || shortDiameterCount > 0) && (
+            <div className="issue-summary" role="alert">
+              {missingBrixCount > 0 && <span>糖度未入力：{missingBrixCount}件</span>}
+              {missingAcidityCount > 0 && <span>酸度未入力：{missingAcidityCount}件</span>}
+              {shortDiameterCount > 0 && <span>横径不足：{shortDiameterCount}件</span>}
             </div>
           )}
 
@@ -200,7 +282,6 @@ export function SurveyInputWorkspace() {
               const isSelected = selectedRows.has(index);
               const mean = average(record.diametersMm);
               const warnings = visibleWarnings(record);
-              const isIncomplete = record.brix === null || record.acidity === null;
 
               return (
                 <article
@@ -222,7 +303,7 @@ export function SurveyInputWorkspace() {
                       aria-expanded={isExpanded}
                       onClick={() => toggleExpanded(index)}
                     >
-                      <span className="orchard-name">{record.orchard}</span>
+                      <span className="orchard-name">{record.orchard || "園地未入力"}</span>
                       <span className="record-meta">{record.variety}{record.notes ? `・${record.notes}` : ""}</span>
                       <span className="metric"><small>平均</small>{formatNumber(mean)}</span>
                       <span className={`metric ${record.brix === null ? "missing-metric" : ""}`}><small>糖</small>{formatNumber(record.brix)}</span>
@@ -233,43 +314,84 @@ export function SurveyInputWorkspace() {
 
                   {isExpanded && (
                     <div className="record-detail">
-                      {isIncomplete && (
-                        <div className="required-fields">
-                          <label>
-                            <span>糖度（必須）</span>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={record.brix ?? ""}
-                              placeholder="例：12.5"
-                              onChange={(event) => updateMeasurement(index, "brix", event.target.value)}
-                            />
-                          </label>
-                          <label>
-                            <span>酸度（必須）</span>
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.01"
-                              value={record.acidity ?? ""}
-                              placeholder="例：0.85"
-                              onChange={(event) => updateMeasurement(index, "acidity", event.target.value)}
-                            />
-                          </label>
-                        </div>
-                      )}
+                      <div className="record-fields">
+                        <label>
+                          <span>園地</span>
+                          <input
+                            data-entry-field="true"
+                            value={record.orchard}
+                            onKeyDown={focusNextField}
+                            onChange={(event) => updateRecord(index, "orchard", event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>品種</span>
+                          <input
+                            data-entry-field="true"
+                            value={record.variety}
+                            onKeyDown={focusNextField}
+                            onChange={(event) => updateRecord(index, "variety", event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>処理区・備考</span>
+                          <input
+                            data-entry-field="true"
+                            value={record.notes}
+                            onKeyDown={focusNextField}
+                            onChange={(event) => updateRecord(index, "notes", event.target.value)}
+                          />
+                        </label>
+                        <label className={record.brix === null ? "required-field" : ""}>
+                          <span>糖度{record.brix === null ? "（必須）" : ""}</span>
+                          <input
+                            data-entry-field="true"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.1"
+                            value={record.brix ?? ""}
+                            placeholder="例：12.5"
+                            onKeyDown={focusNextField}
+                            onChange={(event) => updateMeasurement(index, "brix", event.target.value)}
+                          />
+                        </label>
+                        <label className={record.acidity === null ? "required-field" : ""}>
+                          <span>酸度{record.acidity === null ? "（必須）" : ""}</span>
+                          <input
+                            data-entry-field="true"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.01"
+                            value={record.acidity ?? ""}
+                            placeholder="例：0.85"
+                            onKeyDown={focusNextField}
+                            onChange={(event) => updateMeasurement(index, "acidity", event.target.value)}
+                          />
+                        </label>
+                      </div>
 
                       <div className="diameter-grid">
                         {record.diametersMm.map((diameter, diameterIndex) => (
                           <label key={diameterIndex}>
                             <span>玉{diameterIndex + 1}</span>
-                            <input value={diameter} readOnly aria-label={`玉${diameterIndex + 1}の横径`} />
+                            <input
+                              data-entry-field="true"
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              value={diameter}
+                              onKeyDown={focusNextField}
+                              onChange={(event) =>
+                                updateDiameter(index, diameterIndex, event.target.value)
+                              }
+                              aria-label={`玉${diameterIndex + 1}の横径`}
+                            />
                           </label>
                         ))}
                       </div>
+
                       {warnings.length > 0 && (
                         <ul className="warning-list">
                           {warnings.map((warning) => <li key={warning}>{warning}</li>)}
