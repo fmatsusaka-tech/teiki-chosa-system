@@ -30,7 +30,15 @@ function average(values: number[]): number | null {
 }
 
 function formatNumber(value: number | null, digits = 1) {
-  return value === null ? "—" : value.toFixed(digits);
+  return value === null ? "未入力" : value.toFixed(digits);
+}
+
+function visibleWarnings(record: SurveyRecord): string[] {
+  return record.warnings.filter((warning) => {
+    if (warning === "糖度が未入力です" && record.brix !== null) return false;
+    if (warning === "酸度が未入力です" && record.acidity !== null) return false;
+    return true;
+  });
 }
 
 export function SurveyInputWorkspace() {
@@ -43,15 +51,32 @@ export function SurveyInputWorkspace() {
   const libraryInputRef = useRef<HTMLInputElement>(null);
 
   const warningCount = useMemo(
-    () => records.filter((record) => record.warnings.length > 0).length,
+    () => records.filter((record) => visibleWarnings(record).length > 0).length,
     [records],
+  );
+
+  const incompleteSelectedCount = useMemo(
+    () =>
+      records.filter(
+        (record, index) =>
+          selectedRows.has(index) && (record.brix === null || record.acidity === null),
+      ).length,
+    [records, selectedRows],
   );
 
   const analyzeText = () => {
     const parsed = parseSurveyMemo(sourceText);
     setRecords(parsed.records);
     setSelectedRows(new Set(parsed.records.map((_, index) => index)));
-    setExpandedRows(new Set());
+    setExpandedRows(
+      new Set(
+        parsed.records
+          .map((record, index) =>
+            record.brix === null || record.acidity === null ? index : -1,
+          )
+          .filter((index) => index >= 0),
+      ),
+    );
   };
 
   const toggleExpanded = (index: number) => {
@@ -70,6 +95,21 @@ export function SurveyInputWorkspace() {
       else next.add(index);
       return next;
     });
+  };
+
+  const updateMeasurement = (
+    index: number,
+    field: "brix" | "acidity",
+    rawValue: string,
+  ) => {
+    const value = rawValue === "" ? null : Number(rawValue);
+    setRecords((current) =>
+      current.map((record, recordIndex) =>
+        recordIndex === index
+          ? { ...record, [field]: Number.isFinite(value) ? value : null }
+          : record,
+      ),
+    );
   };
 
   const handlePhotos = (event: ChangeEvent<HTMLInputElement>) => {
@@ -147,15 +187,24 @@ export function SurveyInputWorkspace() {
             </div>
           </div>
 
+          {incompleteSelectedCount > 0 && (
+            <div className="required-input-notice" role="alert">
+              <strong>糖度・酸度が不足しています</strong>
+              <span>黄色の欄へ値を追加してください。未入力のレコードは登録できません。</span>
+            </div>
+          )}
+
           <div className="record-list" role="list">
             {records.map((record, index) => {
               const isExpanded = expandedRows.has(index);
               const isSelected = selectedRows.has(index);
               const mean = average(record.diametersMm);
+              const warnings = visibleWarnings(record);
+              const isIncomplete = record.brix === null || record.acidity === null;
 
               return (
                 <article
-                  className={`record-row ${record.warnings.length > 0 ? "has-warning" : ""}`}
+                  className={`record-row ${warnings.length > 0 ? "has-warning" : ""}`}
                   key={`${record.orchard}-${record.notes}-${index}`}
                   role="listitem"
                 >
@@ -176,14 +225,43 @@ export function SurveyInputWorkspace() {
                       <span className="orchard-name">{record.orchard}</span>
                       <span className="record-meta">{record.variety}{record.notes ? `・${record.notes}` : ""}</span>
                       <span className="metric"><small>平均</small>{formatNumber(mean)}</span>
-                      <span className="metric"><small>糖</small>{formatNumber(record.brix)}</span>
-                      <span className="metric"><small>酸</small>{formatNumber(record.acidity)}</span>
+                      <span className={`metric ${record.brix === null ? "missing-metric" : ""}`}><small>糖</small>{formatNumber(record.brix)}</span>
+                      <span className={`metric ${record.acidity === null ? "missing-metric" : ""}`}><small>酸</small>{formatNumber(record.acidity)}</span>
                       <span className="expand-mark" aria-hidden="true">{isExpanded ? "−" : "+"}</span>
                     </button>
                   </div>
 
                   {isExpanded && (
                     <div className="record-detail">
+                      {isIncomplete && (
+                        <div className="required-fields">
+                          <label>
+                            <span>糖度（必須）</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              step="0.1"
+                              value={record.brix ?? ""}
+                              placeholder="例：12.5"
+                              onChange={(event) => updateMeasurement(index, "brix", event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span>酸度（必須）</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              step="0.01"
+                              value={record.acidity ?? ""}
+                              placeholder="例：0.85"
+                              onChange={(event) => updateMeasurement(index, "acidity", event.target.value)}
+                            />
+                          </label>
+                        </div>
+                      )}
+
                       <div className="diameter-grid">
                         {record.diametersMm.map((diameter, diameterIndex) => (
                           <label key={diameterIndex}>
@@ -192,9 +270,9 @@ export function SurveyInputWorkspace() {
                           </label>
                         ))}
                       </div>
-                      {record.warnings.length > 0 && (
+                      {warnings.length > 0 && (
                         <ul className="warning-list">
-                          {record.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                          {warnings.map((warning) => <li key={warning}>{warning}</li>)}
                         </ul>
                       )}
                     </div>
@@ -205,9 +283,17 @@ export function SurveyInputWorkspace() {
           </div>
 
           <div className="sticky-register-bar">
-            <span>選択中 <strong>{selectedRows.size}件</strong></span>
-            <button type="button" disabled={selectedRows.size === 0}>
-              {selectedRows.size}件をまとめて登録
+            <span>
+              選択中 <strong>{selectedRows.size}件</strong>
+              {incompleteSelectedCount > 0 && `・未入力 ${incompleteSelectedCount}件`}
+            </span>
+            <button
+              type="button"
+              disabled={selectedRows.size === 0 || incompleteSelectedCount > 0}
+            >
+              {incompleteSelectedCount > 0
+                ? "不足項目を入力してください"
+                : `${selectedRows.size}件をまとめて登録`}
             </button>
           </div>
         </section>
