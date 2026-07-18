@@ -42,7 +42,7 @@ function visibleWarnings(record: SurveyRecord): string[] {
 }
 
 export function SurveyInputWorkspace() {
-  const [sourceText, setSourceText] = useState(sampleMemo);
+  const [sourceText, setSourceText] = useState("");
   const [records, setRecords] = useState<SurveyRecord[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
