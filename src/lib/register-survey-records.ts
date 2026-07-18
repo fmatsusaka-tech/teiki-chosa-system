@@ -4,34 +4,24 @@ export type RegistrationResult = {
   ok: boolean;
   registeredCount?: number;
   skippedCount?: number;
-  registrationIds?: string[];
   skippedIds?: string[];
+  message?: string;
   error?: string;
 };
 
-const endpoint = process.env.NEXT_PUBLIC_GAS_WEB_APP_URL;
-const token = process.env.NEXT_PUBLIC_GAS_API_TOKEN;
+const DEFAULT_ENDPOINT =
+  "https://script.google.com/macros/s/AKfycbxPLpa_VKfPueCEjTMEM4-QbotW6nbGnbyk4KqBWJSMn4aRqFLx-9kheb4jxCeAWPk/exec";
 
-export function isRegistrationConfigured(): boolean {
-  return Boolean(endpoint && token);
-}
+const endpoint = process.env.NEXT_PUBLIC_GAS_WEB_APP_URL || DEFAULT_ENDPOINT;
 
 export async function registerSurveyRecords(
   records: SurveyRecord[],
   sourceText: string,
   operator = "",
 ): Promise<RegistrationResult> {
-  if (!endpoint || !token) {
-    throw new Error("登録先が未設定です。GASのWebアプリURLとAPIトークンを設定してください。");
-  }
-
   const payload = {
-    token,
-    client: "定期調査入力アプリ",
-    operator,
-    sourceText,
     records: records.map((record) => ({
-      registrationId: record.id ?? crypto.randomUUID(),
+      id: record.id,
       measuredAt: record.measuredAt,
       orchard: record.orchard,
       variety: record.variety,
@@ -42,12 +32,16 @@ export async function registerSurveyRecords(
       acidity: record.acidity,
       source: record.source,
     })),
+    operator,
+    origin: window.location.href,
+    sourceText,
   };
 
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(payload),
+    redirect: "follow",
   });
 
   if (!response.ok) {
@@ -55,6 +49,6 @@ export async function registerSurveyRecords(
   }
 
   const result = (await response.json()) as RegistrationResult;
-  if (!result.ok) throw new Error(result.error || "登録に失敗しました。");
+  if (!result.ok) throw new Error(result.message || result.error || "登録に失敗しました。");
   return result;
 }
