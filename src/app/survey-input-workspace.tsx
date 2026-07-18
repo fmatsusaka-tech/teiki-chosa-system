@@ -10,6 +10,7 @@ import {
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import type { SurveyRecord } from "../domain/survey-record";
+import { registerSurveyRecords } from "../lib/register-survey-records";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -30,12 +31,22 @@ function visibleWarnings(record: SurveyRecord): string[] {
   });
 }
 
+type RegistrationStatus =
+  | { kind: "idle"; message: "" }
+  | { kind: "loading"; message: string }
+  | { kind: "success"; message: string }
+  | { kind: "error"; message: string };
+
 export function SurveyInputWorkspace() {
   const [sourceText, setSourceText] = useState("");
   const [records, setRecords] = useState<SurveyRecord[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>({
+    kind: "idle",
+    message: "",
+  });
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
@@ -68,6 +79,7 @@ export function SurveyInputWorkspace() {
           selectedRows.has(index) &&
           (record.brix === null ||
             record.acidity === null ||
+            record.diametersMm.length === 0 ||
             record.orchard.trim() === "" ||
             record.variety.trim() === "" ||
             record.variety === "未設定"),
@@ -76,6 +88,7 @@ export function SurveyInputWorkspace() {
   );
 
   const analyzeText = (text = sourceText) => {
+    setRegistrationStatus({ kind: "idle", message: "" });
     if (!text.trim()) {
       setRecords([]);
       setSelectedRows(new Set());
@@ -113,7 +126,6 @@ export function SurveyInputWorkspace() {
     if (!sourceText.trim()) return;
     const timer = window.setTimeout(() => analyzeText(sourceText), 700);
     return () => window.clearTimeout(timer);
-    // sourceTextが変わったときだけ再解析する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceText]);
 
@@ -140,6 +152,7 @@ export function SurveyInputWorkspace() {
     field: K,
     value: SurveyRecord[K],
   ) => {
+    setRegistrationStatus({ kind: "idle", message: "" });
     setRecords((current) =>
       current.map((record, recordIndex) =>
         recordIndex === index ? { ...record, [field]: value } : record,
@@ -159,7 +172,7 @@ export function SurveyInputWorkspace() {
   const updateDiameter = (recordIndex: number, diameterIndex: number, rawValue: string) => {
     const value = Number(rawValue);
     if (!Number.isFinite(value)) return;
-
+    setRegistrationStatus({ kind: "idle", message: "" });
     setRecords((current) =>
       current.map((record, index) => {
         if (index !== recordIndex) return record;
@@ -186,6 +199,8 @@ export function SurveyInputWorkspace() {
     setRecords([]);
     setSelectedRows(new Set());
     setExpandedRows(new Set());
+    setPhotoNames([]);
+    setRegistrationStatus({ kind: "idle", message: "" });
     hasAnalyzedRef.current = false;
   };
 
@@ -194,6 +209,54 @@ export function SurveyInputWorkspace() {
     setPhotoNames(files.map((file) => file.name));
     event.target.value = "";
   };
+
+  const handleRegister = async () => {
+    if (registrationStatus.kind === "loading") return;
+    const selected = records
+      .map((record, index) => ({ record, index }))
+      .filter(({ index }) => selectedRows.has(index));
+
+    if (selected.length === 0 || incompleteSelectedCount > 0) return;
+
+    const recordsWithIds = selected.map(({ record }) => ({
+      ...record,
+      id: record.id ?? crypto.randomUUID(),
+    }));
+
+    setRecords((current) =>
+      current.map((record, index) => {
+        const selectedIndex = selected.findIndex((item) => item.index === index);
+        return selectedIndex >= 0 ? recordsWithIds[selectedIndex] : record;
+      }),
+    );
+
+    setRegistrationStatus({ kind: "loading", message: "スプレッドシートへ登録中です…" });
+
+    try {
+      const result = await registerSurveyRecords(recordsWithIds, sourceText);
+      const registeredCount = result.registeredCount ?? recordsWithIds.length;
+      const skippedCount = result.skippedCount ?? 0;
+      setRegistrationStatus({
+        kind: "success",
+        message: `${registeredCount}件を登録しました。${
+          skippedCount > 0 ? `重複していた${skippedCount}件は登録していません。` : ""
+        }`,
+      });
+      setSourceText("");
+      setRecords([]);
+      setSelectedRows(new Set());
+      setExpandedRows(new Set());
+      setPhotoNames([]);
+      hasAnalyzedRef.current = false;
+    } catch (error) {
+      setRegistrationStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : "登録に失敗しました。",
+      });
+    }
+  };
+
+  const isRegistering = registrationStatus.kind === "loading";
 
   return (
     <>
@@ -249,6 +312,13 @@ export function SurveyInputWorkspace() {
             <span>写真の読み取り機能は次の開発工程で接続します。</span>
           </div>
         )}
+
+        {registrationStatus.kind === "success" && (
+          <div className="temporary-photo-note" role="status">
+            <strong>登録完了</strong>
+            <span>{registrationStatus.message}</span>
+          </div>
+        )}
       </section>
 
       {records.length > 0 && (
@@ -276,6 +346,12 @@ export function SurveyInputWorkspace() {
             </div>
           )}
 
+          {registrationStatus.kind === "error" && (
+            <div className="issue-summary" role="alert">
+              <span>登録エラー：{registrationStatus.message}</span>
+            </div>
+          )}
+
           <div className="record-list" role="list">
             {records.map((record, index) => {
               const isExpanded = expandedRows.has(index);
@@ -294,6 +370,7 @@ export function SurveyInputWorkspace() {
                       <input
                         type="checkbox"
                         checked={isSelected}
+                        disabled={isRegistering}
                         onChange={() => toggleSelected(index)}
                       />
                     </label>
@@ -317,58 +394,23 @@ export function SurveyInputWorkspace() {
                       <div className="record-fields">
                         <label>
                           <span>園地</span>
-                          <input
-                            data-entry-field="true"
-                            value={record.orchard}
-                            onKeyDown={focusNextField}
-                            onChange={(event) => updateRecord(index, "orchard", event.target.value)}
-                          />
+                          <input data-entry-field="true" value={record.orchard} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "orchard", event.target.value)} />
                         </label>
                         <label>
                           <span>品種</span>
-                          <input
-                            data-entry-field="true"
-                            value={record.variety}
-                            onKeyDown={focusNextField}
-                            onChange={(event) => updateRecord(index, "variety", event.target.value)}
-                          />
+                          <input data-entry-field="true" value={record.variety} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "variety", event.target.value)} />
                         </label>
                         <label>
                           <span>処理区・備考</span>
-                          <input
-                            data-entry-field="true"
-                            value={record.notes}
-                            onKeyDown={focusNextField}
-                            onChange={(event) => updateRecord(index, "notes", event.target.value)}
-                          />
+                          <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
                         </label>
                         <label className={record.brix === null ? "required-field" : ""}>
                           <span>糖度{record.brix === null ? "（必須）" : ""}</span>
-                          <input
-                            data-entry-field="true"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="0.1"
-                            value={record.brix ?? ""}
-                            placeholder="例：12.5"
-                            onKeyDown={focusNextField}
-                            onChange={(event) => updateMeasurement(index, "brix", event.target.value)}
-                          />
+                          <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.1" value={record.brix ?? ""} placeholder="例：12.5" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "brix", event.target.value)} />
                         </label>
                         <label className={record.acidity === null ? "required-field" : ""}>
                           <span>酸度{record.acidity === null ? "（必須）" : ""}</span>
-                          <input
-                            data-entry-field="true"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="0.01"
-                            value={record.acidity ?? ""}
-                            placeholder="例：0.85"
-                            onKeyDown={focusNextField}
-                            onChange={(event) => updateMeasurement(index, "acidity", event.target.value)}
-                          />
+                          <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.01" value={record.acidity ?? ""} placeholder="例：0.85" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "acidity", event.target.value)} />
                         </label>
                       </div>
 
@@ -376,18 +418,7 @@ export function SurveyInputWorkspace() {
                         {record.diametersMm.map((diameter, diameterIndex) => (
                           <label key={diameterIndex}>
                             <span>玉{diameterIndex + 1}</span>
-                            <input
-                              data-entry-field="true"
-                              type="number"
-                              inputMode="decimal"
-                              step="0.1"
-                              value={diameter}
-                              onKeyDown={focusNextField}
-                              onChange={(event) =>
-                                updateDiameter(index, diameterIndex, event.target.value)
-                              }
-                              aria-label={`玉${diameterIndex + 1}の横径`}
-                            />
+                            <input data-entry-field="true" type="number" inputMode="decimal" step="0.1" value={diameter} onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
                           </label>
                         ))}
                       </div>
@@ -408,14 +439,22 @@ export function SurveyInputWorkspace() {
             <span>
               選択中 <strong>{selectedRows.size}件</strong>
               {incompleteSelectedCount > 0 && `・未入力 ${incompleteSelectedCount}件`}
+              {registrationStatus.kind === "loading" && "・登録中"}
             </span>
             <button
               type="button"
-              disabled={selectedRows.size === 0 || incompleteSelectedCount > 0}
+              onClick={handleRegister}
+              disabled={
+                selectedRows.size === 0 ||
+                incompleteSelectedCount > 0 ||
+                isRegistering
+              }
             >
-              {incompleteSelectedCount > 0
-                ? "不足項目を入力してください"
-                : `${selectedRows.size}件をまとめて登録`}
+              {isRegistering
+                ? "登録しています…"
+                : incompleteSelectedCount > 0
+                  ? "不足項目を入力してください"
+                  : `${selectedRows.size}件をまとめて登録`}
             </button>
           </div>
         </section>
