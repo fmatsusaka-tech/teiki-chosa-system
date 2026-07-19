@@ -92,17 +92,13 @@ describe("OCR DTO and errors", () => {
     expect(result.blocks[0]?.confidence).toBeNull();
   });
 
-  it("treats unimplemented providers as unavailable and safe to construct", async () => {
+  it("keeps an unavailable PaddleOCR sidecar from preventing construction", async () => {
     const provider = createOcrProvider({ env: {} });
 
-    await expect(provider.checkAvailability()).resolves.toEqual({
+    await expect(provider.checkAvailability()).resolves.toMatchObject({
       available: false,
-      code: "PROVIDER_UNIMPLEMENTED",
-      reason: "paddle OCR provider is configured but not implemented yet.",
+      code: "PROVIDER_UNAVAILABLE",
     });
-    await expect(
-      provider.recognize({ image: sampleImage, mimeType: "image/png" }),
-    ).rejects.toMatchObject({ code: "PROVIDER_UNIMPLEMENTED", provider: "paddle" });
   });
 
   it("normalizes provider-specific errors", () => {

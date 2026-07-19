@@ -1,6 +1,7 @@
 import { OcrProviderError } from "./ocr-error";
 import type { OcrProvider } from "./ocr-provider";
 import type { OcrMode, OcrProviderName } from "./ocr-types";
+import { PaddleOcrProvider } from "./paddle-ocr-provider";
 import { UnimplementedOcrProvider } from "./unimplemented-provider";
 
 export type OcrProviderFactory = (params: { mode: OcrMode }) => OcrProvider;
@@ -29,9 +30,11 @@ export class OcrProviderRegistry {
   }
 }
 
-export function createDefaultOcrProviderRegistry(): OcrProviderRegistry {
+export function createDefaultOcrProviderRegistry(
+  env: Record<string, string | undefined> = process.env,
+): OcrProviderRegistry {
   const registry = new OcrProviderRegistry();
-  registry.register("paddle", ({ mode }) => new UnimplementedOcrProvider("paddle", mode));
+  registry.register("paddle", ({ mode }) => PaddleOcrProvider.fromEnvironment(mode, env));
   registry.register("openai", ({ mode }) => new UnimplementedOcrProvider("openai", mode));
   registry.register("local", ({ mode }) => new UnimplementedOcrProvider("local", mode));
   return registry;
