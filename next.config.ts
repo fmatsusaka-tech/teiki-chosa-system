@@ -5,7 +5,7 @@ const repositoryName = "teiki-chosa-system";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "export",
+  // OCR and persistence credentials must stay behind server-side route handlers.
   trailingSlash: true,
   images: {
     unoptimized: true,

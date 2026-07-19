@@ -6,6 +6,7 @@ export const surveyRecordSchema = z.object({
   registeredAt: z.string().datetime(),
   orchard: z.string().trim().min(1),
   variety: z.string().trim().min(1),
+  treatment: z.string().trim().min(1).nullable().optional(),
   diametersMm: z.array(z.number().positive()).default([]),
   brix: z.number().nonnegative().nullable(),
   acidity: z.number().nonnegative().nullable(),

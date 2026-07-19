@@ -4,6 +4,7 @@ export type { SaveSurveyRecordsResult, SurveyRecordPersistence } from "./persist
 export { saveSurveyRecords } from "./save-survey-records";
 export { UnavailableSurveyRecordPersistence } from "./unavailable-persistence";
 export type { GoogleSheetsAppendRequest, GoogleSheetsClient } from "./google-sheets-client";
+export { GoogleSheetsRestClient } from "./google-sheets-rest-client";
 export {
   DEFAULT_SURVEY_RAW_SHEET_NAME,
   DEFAULT_SURVEY_SPREADSHEET_ID,

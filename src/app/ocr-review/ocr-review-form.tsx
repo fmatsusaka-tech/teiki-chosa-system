@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { SurveyParseCandidate } from "../../services/ocr-parser";
+import { useEffect, useMemo, useState } from "react";
+import { surveyParseCandidateSchema, type SurveyParseCandidate } from "../../services/ocr-parser";
 import { parseOptionalDiameters, parseOptionalNumber, validateReviewCandidate } from "./review-form";
 
 type Props = {
@@ -12,22 +12,49 @@ type Props = {
 
 export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }: Props) {
   const [candidates, setCandidates] = useState(initialCandidates);
-  const [submitted, setSubmitted] = useState(false);
+  const [warningsConfirmed, setWarningsConfirmed] = useState(false);
+  const [status, setStatus] = useState<{ kind: "idle" | "saving" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
   const errors = useMemo(() => candidates.map(validateReviewCandidate), [candidates]);
   const hasErrors = errors.some((fields) => Object.keys(fields).length > 0);
+  const hasWarnings = candidates.some((candidate) => candidate.warnings.length > 0 || candidate.unparsedText.length > 0);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("ocr-review-candidates");
+    if (!stored) return;
+    const parsed = surveyParseCandidateSchema.array().safeParse(JSON.parse(stored));
+    if (parsed.success) setCandidates(parsed.data);
+  }, []);
 
   const update = <K extends keyof SurveyParseCandidate>(index: number, field: K, value: SurveyParseCandidate[K]) => {
-    setSubmitted(false);
+    setStatus({ kind: "idle", message: "" });
     setCandidates((current) => current.map((candidate, candidateIndex) =>
       candidateIndex === index ? { ...candidate, [field]: value } : candidate));
   };
 
   if (candidates.length === 0) {
-    return <div className="review-empty" role="status">確認するOCR解析候補はありません。</div>;
+    return <div className="review-empty" role="status">確認するOCR解析候補はありません。トップ画面で画像を選択してください。</div>;
   }
 
+  const save = async () => {
+    if (status.kind === "saving" || hasErrors || (hasWarnings && !warningsConfirmed)) return;
+    setStatus({ kind: "saving", message: "調査原票へ保存中です…" });
+    try {
+      const response = await fetch("/api/survey-records", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ candidates, warningsConfirmed: true, sourceKind: sessionStorage.getItem("ocr-review-source-kind") || "photo" }),
+      });
+      const payload = await response.json() as { savedCount?: number; error?: string };
+      if (!response.ok) throw new Error(payload.error || "保存に失敗しました。");
+      sessionStorage.removeItem("ocr-review-candidates");
+      sessionStorage.removeItem("ocr-review-source-kind");
+      setStatus({ kind: "success", message: `${payload.savedCount ?? candidates.length}件を調査原票へ保存しました。` });
+    } catch (error) {
+      setStatus({ kind: "error", message: error instanceof Error ? error.message : "保存に失敗しました。" });
+    }
+  };
+
   return (
-    <form className="ocr-review-form" onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }}>
+    <form className="ocr-review-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <div className="review-introduction">
         <p>OCRの認識結果は候補です。内容を修正し、警告を確認してから確定してください。</p>
         <span>{candidates.length}件</span>
@@ -80,8 +107,9 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
           </fieldset>
         );
       })}
-      {submitted && !hasErrors && <p className="review-complete" role="status">内容を確認済みにしました。保存はまだ行われていません。</p>}
-      <button className="review-submit" type="submit" disabled={hasErrors}>入力内容を確定</button>
+      {hasWarnings && <label className="warning-confirm"><input type="checkbox" checked={warningsConfirmed} disabled={status.kind === "saving" || status.kind === "success"} onChange={(event) => setWarningsConfirmed(event.target.checked)} />警告と判別できなかった文字を確認しました</label>}
+      {status.kind !== "idle" && <p className={status.kind === "error" ? "review-error" : "review-complete"} role="status">{status.message}{status.kind === "error" ? " 入力内容は保持されています。" : ""}</p>}
+      <button className="review-submit" type="submit" disabled={hasErrors || (hasWarnings && !warningsConfirmed) || status.kind === "saving" || status.kind === "success"}>{status.kind === "saving" ? "保存中…" : "調査原票へ保存"}</button>
     </form>
   );
 }

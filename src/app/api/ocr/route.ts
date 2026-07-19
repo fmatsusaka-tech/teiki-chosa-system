@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { createOcrProvider, normalizeOcrError } from "../../../services/ocr";
+import { RuleBasedOcrParser } from "../../../services/ocr-parser";
+
+export async function POST(request: Request) {
+  try {
+    const form = await request.formData();
+    const image = form.get("image");
+    if (!(image instanceof File) || !image.type.startsWith("image/")) {
+      return NextResponse.json({ error: "読み取る画像を1枚選択してください。" }, { status: 400 });
+    }
+    const provider = createOcrProvider();
+    const ocrResult = await provider.recognize({
+      image: await image.arrayBuffer(), mimeType: image.type, fileName: image.name,
+      sourceKind: form.get("sourceKind") === "photo" ? "photo" : "screenshot",
+    });
+    const parsed = await new RuleBasedOcrParser().parse({ ocrResult });
+    return NextResponse.json(parsed);
+  } catch (error) {
+    const normalized = normalizeOcrError(error);
+    return NextResponse.json({ error: `OCRに失敗しました。${normalized.message}` }, { status: normalized.code === "INVALID_INPUT" ? 400 : 503 });
+  }
+}
