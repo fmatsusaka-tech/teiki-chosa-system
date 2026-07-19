@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseLegacyPredictionModelTable } from "./model-table";
 
 function row(date: string, multiplier: number): unknown[] {
-  const values = new Array<18).fill(null);
+  const values = new Array(18).fill(null);
   for (let start = 0; start < 18; start += 3) {
     values[start] = date;
     values[start + 1] = multiplier;
