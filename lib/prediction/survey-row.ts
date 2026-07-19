@@ -44,9 +44,18 @@ function asDate(value: unknown): Date | null {
   }
   const text = asText(value);
   if (!text) return null;
-  const normalized = text.replace(/年|月/g, "-").replace(/日/g, "").replace(/\//g, "-");
-  const date = new Date(`${normalized}T00:00:00+09:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  const match = /^(\d{4})[年\/-](\d{1,2})[月\/-](\d{1,2})日?$/.exec(text);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const validationDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    validationDate.getUTCFullYear() !== year
+    || validationDate.getUTCMonth() !== month - 1
+    || validationDate.getUTCDate() !== day
+  ) return null;
+  return new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00+09:00`);
 }
 
 export function createSurveyHeaderIndex(headers: unknown[]): Map<string, number> {
