@@ -1,18 +1,7 @@
 import type { ParsedSurveyBatch, SurveyRecord } from "./survey-record";
+import { orchardMasters, orchardVarietyDefaults } from "./survey-masters";
 
-const orchardVarieties: Record<string, string> = {
-  有中: "ゆら早生",
-  吉川: "ゆら早生",
-  なる1: "ゆら早生",
-  なる１: "ゆら早生",
-  なる2: "早生",
-  なる２: "早生",
-  上中島: "早生",
-  下町: "早生",
-  徳田: "早生",
-};
-
-const orchardNames = new Set(Object.keys(orchardVarieties).map(normalizeOrchard));
+const orchardNames = new Set(orchardMasters.flatMap((item) => [item.canonicalName, ...item.aliases]).map(normalizeOrchard));
 const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ"]);
 const fullDatePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
 const shortDatePattern = /^\d{1,2}[/-]\d{1,2}$/;
@@ -97,7 +86,7 @@ export function parseSurveyMemo(
       return parsed.value;
     });
 
-    const variety = orchardVarieties[currentOrchard] ?? "未設定";
+    const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
     if (brix === null) warnings.push("糖度が未入力です");

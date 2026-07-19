@@ -7,7 +7,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; }
-button, textarea, input { font: inherit; }
+button, textarea, input, select { font: inherit; }
 
 .page-shell {
   width: min(100% - 24px, 980px);
@@ -50,7 +50,7 @@ textarea {
   background: #fafcf9;
   line-height: 1.6;
 }
-textarea:focus, input:focus { outline: 3px solid rgba(31, 77, 43, 0.14); border-color: #4f7859; }
+textarea:focus, input:focus, select:focus { outline: 3px solid rgba(31, 77, 43, 0.14); border-color: #4f7859; }
 button {
   min-height: 46px;
   padding: 12px 16px;
@@ -126,6 +126,29 @@ button:disabled { cursor: not-allowed; background: #dfe5df; color: #7d887f; }
 .flow-item span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #1f4d2b; color: white; font-weight: 700; }
 .flow-item p { margin: 0; font-size: 0.9rem; }
 
+.ocr-review-form { display: grid; gap: 16px; }
+.review-introduction, .review-empty { padding: 16px; border: 1px solid #dce3dc; border-radius: 14px; background: #fff; }
+.review-introduction { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.review-introduction p { margin: 0; line-height: 1.6; }
+.review-introduction span { padding: 6px 10px; border-radius: 999px; background: #eef2ee; white-space: nowrap; }
+.review-candidate { min-width: 0; margin: 0; padding: 18px; border: 1px solid #dce3dc; border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(29, 51, 34, 0.08); }
+.review-candidate legend { padding: 0 8px; font-weight: 800; }
+.review-warnings { margin: 0 0 14px; padding: 12px 12px 12px 32px; border-radius: 10px; background: #fff2cf; color: #694800; }
+.review-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.review-fields label { display: grid; gap: 6px; font-size: .82rem; font-weight: 700; }
+.review-fields input, .review-fields select, .review-fields textarea, .review-diameters input { width: 100%; margin: 0; padding: 11px; border: 1px solid #cdd7ce; border-radius: 10px; background: #fff; }
+.review-fields b { color: #8a5200; font-size: .72rem; }
+.review-fields small { color: #a13f20; }
+.review-fields .field-error input, .review-fields .field-error select { border-color: #bd5739; background: #fff8f5; }
+.review-wide { grid-column: 1 / -1; }
+.review-diameters { display: grid; gap: 8px; margin-top: 16px; font-size: .82rem; font-weight: 700; }
+.review-diameters > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }
+.review-diameters button { justify-self: start; }
+.review-candidate details { margin-top: 14px; }
+.review-candidate pre { overflow: auto; padding: 12px; background: #f5f7f2; white-space: pre-wrap; }
+.review-submit { justify-self: end; border-color: #1f4d2b; background: #1f4d2b; color: #fff; }
+.review-complete { margin: 0; padding: 12px; border-radius: 10px; background: #eaf5eb; color: #24542d; }
+
 @media (max-width: 640px) {
   .input-actions { grid-template-columns: 1fr 1fr; }
   .input-actions button:last-child { grid-column: 1 / -1; }
@@ -139,6 +162,9 @@ button:disabled { cursor: not-allowed; background: #dfe5df; color: #7d887f; }
   .sticky-register-bar { align-items: stretch; flex-direction: column; }
   .sticky-register-bar span { font-size: 0.86rem; }
   .sticky-register-bar button { width: 100%; padding-inline: 12px; }
+  .review-fields { grid-template-columns: 1fr; }
+  .review-wide { grid-column: auto; }
+  .review-submit { width: 100%; }
 }
 
 @media (min-width: 720px) {
