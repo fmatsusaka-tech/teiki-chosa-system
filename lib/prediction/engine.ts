@@ -5,9 +5,17 @@ import type {
   StandardCurvePoint,
 } from "./types";
 
+const JAPAN_MONTH_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Tokyo",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 function toMonthDay(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const parts = JAPAN_MONTH_DAY_FORMATTER.formatToParts(date);
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!month || !day) throw new Error("計測日を月日に変換できませんでした。");
   return `${month}-${day}`;
 }
 
