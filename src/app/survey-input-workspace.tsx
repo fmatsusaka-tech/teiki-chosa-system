@@ -43,6 +43,7 @@ export function SurveyInputWorkspace() {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [ocrStatus, setOcrStatus] = useState<RegistrationStatus>({ kind: "idle", message: "" });
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>({
     kind: "idle",
     message: "",
@@ -204,10 +205,26 @@ export function SurveyInputWorkspace() {
     hasAnalyzedRef.current = false;
   };
 
-  const handlePhotos = (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     setPhotoNames(files.map((file) => file.name));
     event.target.value = "";
+    const image = files[0];
+    if (!image || ocrStatus.kind === "loading") return;
+    setOcrStatus({ kind: "loading", message: "OCRで画像を読み取っています…" });
+    try {
+      const form = new FormData();
+      form.append("image", image);
+      form.append("sourceKind", image.name.toLowerCase().includes("screenshot") ? "screenshot" : "photo");
+      const response = await fetch("/api/ocr", { method: "POST", body: form });
+      const payload = await response.json() as { candidates?: unknown[]; error?: string };
+      if (!response.ok || !payload.candidates) throw new Error(payload.error || "OCRに失敗しました。");
+      sessionStorage.setItem("ocr-review-candidates", JSON.stringify(payload.candidates));
+      sessionStorage.setItem("ocr-review-source-kind", form.get("sourceKind") as string);
+      window.location.assign("/ocr-review/");
+    } catch (error) {
+      setOcrStatus({ kind: "error", message: error instanceof Error ? error.message : "OCRに失敗しました。" });
+    }
   };
 
   const handleRegister = async () => {
@@ -302,15 +319,18 @@ export function SurveyInputWorkspace() {
           className="visually-hidden"
           type="file"
           accept="image/*"
-          multiple
           onChange={handlePhotos}
         />
 
         {photoNames.length > 0 && (
           <div className="temporary-photo-note" role="status">
-            <strong>{photoNames.length}枚を一時選択中</strong>
-            <span>写真の読み取り機能は次の開発工程で接続します。</span>
+            <strong>{photoNames[0]}</strong>
+            <span>{ocrStatus.message || "画像を確認画面へ渡します。"}</span>
           </div>
+        )}
+
+        {ocrStatus.kind === "error" && (
+          <div className="issue-summary" role="alert"><span>{ocrStatus.message}画像を選び直して再試行できます。</span></div>
         )}
 
         {registrationStatus.kind === "success" && (

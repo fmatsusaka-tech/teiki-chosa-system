@@ -13,7 +13,7 @@ const record: SurveyRecord = {
   measuredAt: "2026-07-19T00:00:00.000Z",
   registeredAt: "2026-07-19T01:00:00.000Z",
   orchard: "徳田", variety: "早生", diametersMm: [55.1, 56.2], brix: null, acidity: 0,
-  notes: "確認済み", source: "screenshot", confidence: null, warnings: [],
+  treatment: "マルチ", notes: "確認済み", source: "screenshot", confidence: null, warnings: [],
 };
 
 function clientWithHeaders(headers: readonly string[] = SURVEY_RAW_HEADERS) {
@@ -35,7 +35,7 @@ describe("GoogleSheetsSurveyRecordPersistence", () => {
     expect(client.appendRows).toHaveBeenCalledWith(expect.objectContaining({
       spreadsheetId: DEFAULT_SURVEY_SPREADSHEET_ID,
       sheetName: "調査原票",
-      rows: [expect.arrayContaining([record.id, "徳田", "早生", "調査担当", "OCR確認画面", "徳田 早生"])],
+      rows: [expect.arrayContaining([record.id, "徳田", "早生", "マルチ", "調査担当", "OCR確認画面", "徳田 早生"])],
     }));
   });
 

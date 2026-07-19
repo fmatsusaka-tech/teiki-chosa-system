@@ -40,7 +40,7 @@ function recordCells(
     計測日: record.measuredAt,
     園地名: record.orchard,
     品種: record.variety,
-    処理区: "",
+    処理区: record.treatment ?? "",
     備考: record.notes,
     横径1: diameters[0], 横径2: diameters[1], 横径3: diameters[2], 横径4: diameters[3], 横径5: diameters[4],
     横径6: diameters[5], 横径7: diameters[6], 横径8: diameters[7], 横径9: diameters[8], 横径10: diameters[9],
