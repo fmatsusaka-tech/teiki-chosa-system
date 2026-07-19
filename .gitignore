@@ -12,3 +12,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 tsconfig.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]

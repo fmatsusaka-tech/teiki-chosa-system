@@ -14,7 +14,7 @@ export function createOcrProviderSelection(params?: {
   registry?: OcrProviderRegistry;
 }): OcrProviderSelection {
   const config = createOcrRuntimeConfig(params?.env);
-  const registry = params?.registry ?? createDefaultOcrProviderRegistry();
+  const registry = params?.registry ?? createDefaultOcrProviderRegistry(params?.env);
   return {
     config,
     provider: registry.resolve(config.provider, config.mode),
