@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadPredictionCurves, loadSurveyRecords } from "@/lib/prediction/data-source";
-import { predictSurveyRecords } from "@/lib/prediction/predict-survey";
+import { loadPredictionCurves, loadSurveyRecords } from "../../../../lib/prediction/data-source";
+import { predictSurveyRecords } from "../../../../lib/prediction/predict-survey";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
