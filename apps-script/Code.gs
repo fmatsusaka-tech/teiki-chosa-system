@@ -1,7 +1,13 @@
 const SPREADSHEET_ID = "1Ix7qFigeUvmxkEl3C51rmzuBzYDq7OR_ZGHq6GUKa0g";
 const RAW_SHEET_NAME = "調査原票";
+const SURVEY_SHEET_NAME = "調査データ";
 const API_TOKEN_PROPERTY = "API_TOKEN";
 const MAX_DIAMETERS = 10;
+const DIAMETER_OUTPUT_HEADERS = Array.from(
+  { length: MAX_DIAMETERS },
+  (_, index) => `玉${index + 1}横径`,
+);
+const DIAMETER_SUMMARY_HEADERS = ["横径個数", "横径平均", "横径最小", "横径最大"];
 
 function doGet() {
   return jsonResponse_({ ok: true, service: "teiki-chosa-registration" });
@@ -22,7 +28,8 @@ function doPost(e) {
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(RAW_SHEET_NAME);
     if (!sheet) throw new Error(`シート「${RAW_SHEET_NAME}」が見つかりません。`);
 
-    const existingIds = getExistingIds_(sheet);
+    const rawHeaders = getHeaders_(sheet);
+    const existingIds = getExistingIds_(sheet, rawHeaders);
     const now = new Date();
     const rows = [];
     const acceptedIds = [];
@@ -42,22 +49,25 @@ function doPost(e) {
         : [];
       while (diameters.length < MAX_DIAMETERS) diameters.push("");
 
-      rows.push([
-        registrationId,
-        now,
-        new Date(record.measuredAt),
-        cleanText_(record.orchard),
-        cleanText_(record.variety),
-        cleanText_(record.treatment || ""),
-        cleanText_(record.notes || ""),
-        ...diameters,
-        Number(record.brix),
-        Number(record.acidity),
-        cleanText_(record.source || "text"),
-        cleanText_(payload.operator || record.operator || ""),
-        cleanText_(payload.client || "定期調査入力アプリ"),
-        cleanText_(payload.sourceText || ""),
-      ]);
+      const cells = {
+        登録ID: registrationId,
+        登録日時: now,
+        計測日: new Date(record.measuredAt),
+        園地名: cleanText_(record.orchard),
+        品種: cleanText_(record.variety),
+        処理区: cleanText_(record.treatment || ""),
+        備考: cleanText_(record.notes || ""),
+        糖度: Number(record.brix),
+        酸度: Number(record.acidity),
+        入力方法: cleanText_(record.source || "text"),
+        入力者: cleanText_(payload.operator || record.operator || ""),
+        送信元: cleanText_(payload.client || "定期調査入力アプリ"),
+        原文メモ: cleanText_(payload.sourceText || ""),
+      };
+      diameters.forEach((diameter, diameterIndex) => {
+        cells[`横径${diameterIndex + 1}`] = diameter;
+      });
+      rows.push(rowForHeaders_(cells, rawHeaders));
       acceptedIds.push(registrationId);
       existingIds.add(registrationId);
     });
@@ -65,7 +75,12 @@ function doPost(e) {
     if (rows.length > 0) {
       const startRow = sheet.getLastRow() + 1;
       sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-      sheet.getRange(startRow, 2, rows.length, 2).setNumberFormat("yyyy/mm/dd hh:mm:ss");
+      ["登録日時", "計測日"].forEach((header) => {
+        const columnIndex = rawHeaders.indexOf(header);
+        if (columnIndex >= 0) {
+          sheet.getRange(startRow, columnIndex + 1, rows.length, 1).setNumberFormat("yyyy/mm/dd hh:mm:ss");
+        }
+      });
     }
 
     return jsonResponse_({
@@ -84,6 +99,76 @@ function doPost(e) {
   } finally {
     try { lock.releaseLock(); } catch (_) {}
   }
+}
+
+/**
+ * 「調査原票」から「調査データ」を全件再生成する。
+ * 既存データの再生成時にも、列位置ではなく見出し名だけを使用する。
+ */
+function regenerateSurveyData() {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const rawSheet = spreadsheet.getSheetByName(RAW_SHEET_NAME);
+  const surveySheet = spreadsheet.getSheetByName(SURVEY_SHEET_NAME);
+  if (!rawSheet || !surveySheet) throw new Error("調査原票または調査データが見つかりません。");
+
+  const rawHeaders = getHeaders_(rawSheet);
+  const surveyHeaders = ensureDiameterOutputHeaders_(getHeaders_(surveySheet));
+  surveySheet.getRange(1, 1, 1, surveyHeaders.length).setValues([surveyHeaders]);
+
+  const rawRows = rawSheet.getLastRow() < 2
+    ? []
+    : rawSheet.getRange(2, 1, rawSheet.getLastRow() - 1, rawHeaders.length).getValues();
+  const outputRows = rawRows.map((row) => buildSurveyDataRow_(rawHeaders, row, surveyHeaders));
+
+  const oldDataRows = Math.max(surveySheet.getLastRow() - 1, 0);
+  if (oldDataRows > 0) surveySheet.getRange(2, 1, oldDataRows, surveySheet.getLastColumn()).clearContent();
+  if (outputRows.length > 0) {
+    surveySheet.getRange(2, 1, outputRows.length, surveyHeaders.length).setValues(outputRows);
+  }
+  return outputRows.length;
+}
+
+function ensureDiameterOutputHeaders_(headers) {
+  const retained = headers.filter((header) => !DIAMETER_OUTPUT_HEADERS.includes(header));
+  const summaryIndex = retained.indexOf("横径個数");
+  const notesIndex = retained.indexOf("備考");
+  const insertionIndex = summaryIndex >= 0 ? summaryIndex : notesIndex >= 0 ? notesIndex + 1 : retained.length;
+  retained.splice(insertionIndex, 0, ...DIAMETER_OUTPUT_HEADERS);
+  DIAMETER_SUMMARY_HEADERS.forEach((header) => {
+    if (!retained.includes(header)) retained.push(header);
+  });
+  return retained;
+}
+
+function buildSurveyDataRow_(rawHeaders, rawRow, surveyHeaders) {
+  const raw = Object.fromEntries(rawHeaders.map((header, index) => [header, rawRow[index]]));
+  const diameters = Array.from({ length: MAX_DIAMETERS }, (_, index) => raw[`横径${index + 1}`])
+    .filter((value) => value !== "" && value !== null && value !== undefined);
+  const numericDiameters = diameters.map(Number).filter(Number.isFinite);
+  const cells = { ...raw };
+  cells["調査日"] = raw["調査日"] ?? raw["計測日"] ?? "";
+  cells["園地"] = raw["園地"] ?? raw["園地名"] ?? "";
+  DIAMETER_OUTPUT_HEADERS.forEach((header, index) => {
+    const value = raw[`横径${index + 1}`];
+    cells[header] = value === null || value === undefined ? "" : value;
+  });
+  cells["横径個数"] = numericDiameters.length || "";
+  cells["横径平均"] = numericDiameters.length
+    ? numericDiameters.reduce((sum, value) => sum + value, 0) / numericDiameters.length
+    : "";
+  cells["横径最小"] = numericDiameters.length ? Math.min(...numericDiameters) : "";
+  cells["横径最大"] = numericDiameters.length ? Math.max(...numericDiameters) : "";
+  return rowForHeaders_(cells, surveyHeaders);
+}
+
+function getHeaders_(sheet) {
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn === 0) return [];
+  return sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0].map(cleanText_);
+}
+
+function rowForHeaders_(cells, headers) {
+  return headers.map((header) => Object.prototype.hasOwnProperty.call(cells, header) ? cells[header] : "");
 }
 
 function parsePayload_(e) {
@@ -124,11 +209,13 @@ function validateRecord_(record, index) {
   }
 }
 
-function getExistingIds_(sheet) {
+function getExistingIds_(sheet, headers) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return new Set();
+  const idColumnIndex = headers.indexOf("登録ID");
+  if (idColumnIndex < 0) throw new Error("調査原票に「登録ID」見出しがありません。");
   return new Set(
-    sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues().flat().filter(String),
+    sheet.getRange(2, idColumnIndex + 1, lastRow - 1, 1).getDisplayValues().flat().filter(String),
   );
 }
 
