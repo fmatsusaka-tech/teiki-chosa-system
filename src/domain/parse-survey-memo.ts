@@ -7,18 +7,16 @@ import {
 } from "./survey-masters";
 
 const orchardNames = new Set(orchardMasters.flatMap((item) => [item.canonicalName, ...item.aliases]).map(normalizeOrchard));
-const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ"]);
+const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ", "カリウム"]);
 const fullDatePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
 const shortDatePattern = /^\d{1,2}[/-]\d{1,2}$/;
 const numberPattern = /^-?\d+(?:\.\d+)?$/;
 const labelledMeasurementPattern = /(?:糖度|糖|酸度|酸)\s*[:：]?\s*-?\d+(?:\.\d+)?/;
 
-function normalizeDate(value: string, registeredAt: string): string {
+function normalizeDate(value: string): string {
   const parts = value.split(/[/-]/).map(Number);
-  const [year, month, day] =
-    parts.length === 3
-      ? parts
-      : [new Date(registeredAt).getUTCFullYear(), parts[0], parts[1]];
+  if (parts.length !== 3) return "";
+  const [year, month, day] = parts;
   return new Date(Date.UTC(year, month - 1, day)).toISOString();
 }
 
@@ -160,6 +158,7 @@ function parseInlineSurveyLine(
     warnings.push(`品種「${variety}」はマスターに登録されていません`);
   }
   if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
+  if (!measuredAt) warnings.push("調査年が不明です。調査日を確認してください");
   if (brix === null) warnings.push("糖度が未入力です");
   if (acidity === null) warnings.push("酸度が未入力です");
 
@@ -188,7 +187,7 @@ export function parseSurveyMemo(
     .map((line) => line.trim())
     .filter(Boolean);
 
-  let measuredAt = registeredAt;
+  let measuredAt = "";
   let currentOrchard = "";
   let currentTreatment = "";
   let currentNotes: string[] = [];
@@ -219,16 +218,18 @@ export function parseSurveyMemo(
     const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
+    if (!measuredAt) warnings.push("調査年が不明です。調査日を確認してください");
     if (normalizedBrix === null) warnings.push("糖度が未入力です");
     if (acidity === null) warnings.push("酸度が未入力です");
 
-    const notes = [currentTreatment, ...currentNotes].filter(Boolean).join("・");
+    const notes = currentNotes.filter(Boolean).join("・");
 
     records.push({
       measuredAt,
       registeredAt,
       orchard: currentOrchard,
       variety,
+      treatment: currentTreatment || null,
       diametersMm,
       brix: normalizedBrix,
       acidity,
@@ -245,7 +246,7 @@ export function parseSurveyMemo(
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     if (fullDatePattern.test(line) || shortDatePattern.test(line)) {
-      measuredAt = normalizeDate(line, registeredAt);
+      measuredAt = normalizeDate(line);
       continue;
     }
 

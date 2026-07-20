@@ -27,6 +27,7 @@ function visibleWarnings(record: SurveyRecord): string[] {
     if (warning === "酸度が未入力です" && record.acidity !== null) return false;
     if (warning.startsWith("横径が") && record.diametersMm.length >= 5) return false;
     if (warning === "品種を特定できませんでした" && record.variety !== "未設定") return false;
+    if (warning === "調査年が不明です。調査日を確認してください" && record.measuredAt) return false;
     return true;
   });
 }
@@ -82,6 +83,7 @@ export function SurveyInputWorkspace() {
           (record.brix === null ||
             record.acidity === null ||
             record.diametersMm.length === 0 ||
+            record.measuredAt.trim() === "" ||
             record.orchard.trim() === "" ||
             record.variety.trim() === "" ||
             record.variety === "未設定"),
@@ -155,7 +157,7 @@ export function SurveyInputWorkspace() {
     const now = new Date().toISOString();
     const index = records.length;
     const record: SurveyRecord = {
-      measuredAt: records[0]?.measuredAt ?? now,
+      measuredAt: records[0]?.measuredAt ?? "",
       registeredAt: now,
       orchard: "",
       variety: "",
@@ -209,6 +211,10 @@ export function SurveyInputWorkspace() {
   ) => {
     const value = rawValue === "" ? null : Number(rawValue);
     updateRecord(index, field, Number.isFinite(value) ? value : null);
+  };
+
+  const updateMeasuredDate = (index: number, rawValue: string) => {
+    updateRecord(index, "measuredAt", rawValue ? `${rawValue}T00:00:00.000Z` : "");
   };
 
   const updateDiameter = (recordIndex: number, diameterIndex: number, rawValue: string) => {
@@ -456,7 +462,11 @@ export function SurveyInputWorkspace() {
                       onClick={() => toggleExpanded(index)}
                     >
                       <span className="orchard-name">{record.orchard || "園地未入力"}</span>
-                      <span className="record-meta">{record.variety}{record.notes ? `・${record.notes}` : ""}</span>
+                      <span className="record-meta">
+                        {record.variety}
+                        {record.treatment ? `・${record.treatment}` : ""}
+                        {record.notes ? `・${record.notes}` : ""}
+                      </span>
                       <span className="metric"><small>平均</small>{formatNumber(mean)}</span>
                       <span className={`metric ${record.brix === null ? "missing-metric" : ""}`}><small>糖</small>{formatNumber(record.brix)}</span>
                       <span className={`metric ${record.acidity === null ? "missing-metric" : ""}`}><small>酸</small>{formatNumber(record.acidity)}</span>
@@ -467,6 +477,10 @@ export function SurveyInputWorkspace() {
                   {isExpanded && (
                     <div className="record-detail">
                       <div className="record-fields">
+                        <label className={!record.measuredAt ? "required-field" : ""}>
+                          <span>調査日（必須）</span>
+                          <input data-entry-field="true" type="date" value={record.measuredAt.slice(0, 10)} onKeyDown={focusNextField} onChange={(event) => updateMeasuredDate(index, event.target.value)} />
+                        </label>
                         <label>
                           <span>園地</span>
                           <input data-entry-field="true" value={record.orchard} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "orchard", event.target.value)} />
@@ -476,7 +490,11 @@ export function SurveyInputWorkspace() {
                           <input data-entry-field="true" value={record.variety} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "variety", event.target.value)} />
                         </label>
                         <label>
-                          <span>処理区・備考</span>
+                          <span>処理区</span>
+                          <input data-entry-field="true" value={record.treatment ?? ""} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "treatment", event.target.value || null)} />
+                        </label>
+                        <label>
+                          <span>備考</span>
                           <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
                         </label>
                         <label className={record.brix === null ? "required-field" : ""}>

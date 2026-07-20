@@ -192,24 +192,27 @@ describe("parseSurveyMemo", () => {
 
     expect(result.records).toHaveLength(2);
     expect(result.records[0]).toMatchObject({
-      measuredAt: "2026-11-16T00:00:00.000Z",
+      measuredAt: "",
       orchard: "有中",
       variety: "ゆら早生",
-      notes: "無処理区",
+      treatment: "無処理区",
+      notes: "",
       diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
       brix: 14.5,
       acidity: 1.1,
     });
     expect(result.records[1]).toMatchObject({
-      measuredAt: "2026-11-16T00:00:00.000Z",
+      measuredAt: "",
       orchard: "有中",
       variety: "ゆら早生",
-      notes: "スキー・受精よし",
+      treatment: "スキー",
+      notes: "受精よし",
       diametersMm: [60.2, 58, 60.7, 54.1, 56.2, 53.5],
       brix: 13.5,
       acidity: 1.2,
     });
     expect(result.batchWarnings).toEqual([]);
+    expect(result.records[0].warnings).toContain("調査年が不明です。調査日を確認してください");
   });
 
   it("糖度のみの行と未知の園地を含む実メモを候補として分割する", () => {
@@ -307,7 +310,8 @@ describe("parseSurveyMemo", () => {
     expect(result.records[4].warnings).not.toContain("糖度が未入力です");
     expect(result.records[5]).toMatchObject({
       orchard: "徳田",
-      notes: "カリウム",
+      treatment: "カリウム",
+      notes: "",
       diametersMm: [73.4, 68.1, 64.2, 54.3],
       brix: 12.5,
       acidity: 1.3,
@@ -413,7 +417,8 @@ describe("parseSurveyMemo", () => {
     expect(result.records[0]).toMatchObject({
       orchard: "有中",
       variety: "ゆら早生",
-      notes: "無処理区",
+      treatment: "無処理区",
+      notes: "",
       diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
       brix: 16.1,
       acidity: 1,
@@ -448,18 +453,20 @@ describe("parseSurveyMemo", () => {
     expect(result.records).toHaveLength(9);
     expect(result.records[0]).toMatchObject({
       orchard: "有中",
-      notes: "無処理区",
+      treatment: "無処理区",
+      notes: "",
       diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
       brix: null,
       acidity: null,
-      measuredAt: "2026-11-16T00:00:00.000Z",
+      measuredAt: "",
     });
     expect(result.records[0].warnings).toContain("糖度が未入力です");
     expect(result.records[0].warnings).toContain("酸度が未入力です");
 
     expect(result.records[1]).toMatchObject({
       orchard: "有中",
-      notes: "スキー",
+      treatment: "スキー",
+      notes: "",
       diametersMm: [60.2, 58, 60.7, 54.1, 56.2, 53.5],
     });
 
