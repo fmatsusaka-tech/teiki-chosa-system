@@ -15,6 +15,7 @@ import {
   hasRequiredSurveyFields,
 } from "../domain/survey-record-registration";
 import { registerSurveyRecords } from "../lib/register-survey-records";
+import { validateOcrImage } from "../services/ocr/ocr-image-input";
 
 function average(values: number[]): number | null {
   const measuredValues = values.filter((value) => Number.isFinite(value) && value > 0);
@@ -276,17 +277,25 @@ export function SurveyInputWorkspace() {
     hasAnalyzedRef.current = false;
   };
 
-  const handlePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotos = async (
+    event: ChangeEvent<HTMLInputElement>,
+    sourceKind: "photo" | "screenshot",
+  ) => {
     const files = Array.from(event.target.files ?? []);
     setPhotoNames(files.map((file) => file.name));
     event.target.value = "";
     const image = files[0];
     if (!image || ocrStatus.kind === "loading") return;
+    const validation = validateOcrImage(image);
+    if (!validation.valid) {
+      setOcrStatus({ kind: "error", message: validation.message });
+      return;
+    }
     setOcrStatus({ kind: "loading", message: "OCRで画像を読み取っています…" });
     try {
       const form = new FormData();
       form.append("image", image);
-      form.append("sourceKind", image.name.toLowerCase().includes("screenshot") ? "screenshot" : "photo");
+      form.append("sourceKind", sourceKind);
       const response = await fetch("/api/ocr", { method: "POST", body: form });
       const payload = await response.json() as { candidates?: unknown[]; error?: string };
       if (!response.ok || !payload.candidates) throw new Error(payload.error || "OCRに失敗しました。");
@@ -372,7 +381,7 @@ export function SurveyInputWorkspace() {
             その場で撮影
           </button>
           <button type="button" onClick={() => libraryInputRef.current?.click()}>
-            写真を選択
+            スクリーンショットを選択
           </button>
           <button type="button" disabled={!sourceText} onClick={clearInput}>
             入力を消す
@@ -383,16 +392,16 @@ export function SurveyInputWorkspace() {
           ref={cameraInputRef}
           className="visually-hidden"
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp"
           capture="environment"
-          onChange={handlePhotos}
+          onChange={(event) => void handlePhotos(event, "photo")}
         />
         <input
           ref={libraryInputRef}
           className="visually-hidden"
           type="file"
-          accept="image/*"
-          onChange={handlePhotos}
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(event) => void handlePhotos(event, "screenshot")}
         />
 
         {photoNames.length > 0 && (
