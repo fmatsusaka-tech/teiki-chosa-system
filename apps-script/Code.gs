@@ -129,14 +129,11 @@ function regenerateSurveyData() {
 }
 
 function ensureDiameterOutputHeaders_(headers) {
-  const retained = headers.filter((header) => !DIAMETER_OUTPUT_HEADERS.includes(header));
-  const summaryIndex = retained.indexOf("横径個数");
+  const diameterHeaders = [...DIAMETER_OUTPUT_HEADERS, ...DIAMETER_SUMMARY_HEADERS];
+  const retained = headers.filter((header) => !diameterHeaders.includes(header));
   const notesIndex = retained.indexOf("備考");
-  const insertionIndex = summaryIndex >= 0 ? summaryIndex : notesIndex >= 0 ? notesIndex + 1 : retained.length;
-  retained.splice(insertionIndex, 0, ...DIAMETER_OUTPUT_HEADERS);
-  DIAMETER_SUMMARY_HEADERS.forEach((header) => {
-    if (!retained.includes(header)) retained.push(header);
-  });
+  const insertionIndex = notesIndex >= 0 ? notesIndex + 1 : retained.length;
+  retained.splice(insertionIndex, 0, ...diameterHeaders);
   return retained;
 }
 
@@ -146,8 +143,15 @@ function buildSurveyDataRow_(rawHeaders, rawRow, surveyHeaders) {
     .filter((value) => value !== "" && value !== null && value !== undefined);
   const numericDiameters = diameters.map(Number).filter(Number.isFinite);
   const cells = { ...raw };
-  cells["調査日"] = raw["調査日"] ?? raw["計測日"] ?? "";
+  const measuredAt = raw["調査日"] ?? raw["計測日"] ?? "";
+  const dateParts = surveyDateParts_(measuredAt);
+  cells["調査日"] = measuredAt;
   cells["園地"] = raw["園地"] ?? raw["園地名"] ?? "";
+  cells["年度"] = dateParts ? fiscalYear_(dateParts.year, dateParts.month) : "";
+  cells["年"] = dateParts ? dateParts.year : "";
+  cells["月"] = dateParts ? dateParts.month : "";
+  cells["調査基準月"] = dateParts ? surveyBaseMonth_(dateParts.month, dateParts.day) : "";
+  cells["調査区分"] = dateParts ? surveyPeriod_(dateParts.day) : "";
   DIAMETER_OUTPUT_HEADERS.forEach((header, index) => {
     const value = raw[`横径${index + 1}`];
     cells[header] = value === null || value === undefined ? "" : value;
@@ -158,7 +162,43 @@ function buildSurveyDataRow_(rawHeaders, rawRow, surveyHeaders) {
     : "";
   cells["横径最小"] = numericDiameters.length ? Math.min(...numericDiameters) : "";
   cells["横径最大"] = numericDiameters.length ? Math.max(...numericDiameters) : "";
+  cells["糖酸比"] = sugarAcidRatio_(raw["糖度"], raw["酸度"]);
+  cells["データ状態"] = surveyDataStatus_(measuredAt, cells["園地"], raw["品種"]);
   return rowForHeaders_(cells, surveyHeaders);
+}
+
+function surveyDateParts_(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() };
+}
+
+function fiscalYear_(year, month) {
+  return month < 4 ? year - 1 : year;
+}
+
+function surveyBaseMonth_(month, day) {
+  return day >= 25 ? month % 12 + 1 : month;
+}
+
+function surveyPeriod_(day) {
+  if (day >= 25 || day <= 10) return "前半";
+  if (day <= 20) return "中頃";
+  return "";
+}
+
+function sugarAcidRatio_(brix, acidity) {
+  if (brix === "" || brix === null || brix === undefined
+    || acidity === "" || acidity === null || acidity === undefined) return "";
+  const numericBrix = Number(brix);
+  const numericAcidity = Number(acidity);
+  if (!Number.isFinite(numericBrix) || !Number.isFinite(numericAcidity) || numericAcidity === 0) return "";
+  return numericBrix / numericAcidity;
+}
+
+function surveyDataStatus_(measuredAt, orchard, variety) {
+  return surveyDateParts_(measuredAt) && cleanText_(orchard) && cleanText_(variety) ? "有効" : "要確認";
 }
 
 function getHeaders_(sheet) {

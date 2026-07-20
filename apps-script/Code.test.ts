@@ -9,19 +9,20 @@ type AppsScriptHelpers = {
     rawRow: unknown[],
     surveyHeaders: string[],
   ) => unknown[];
+  surveyDateParts_: (value: unknown) => { year: number; month: number; day: number } | null;
 };
 
 function loadHelpers(): AppsScriptHelpers {
   const source = readFileSync(new URL("./Code.gs", import.meta.url), "utf8");
   const context: Record<string, unknown> = {};
   vm.runInNewContext(
-    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_ };`,
+    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_ };`,
     context,
   );
   return context.helpers as AppsScriptHelpers;
 }
 
-const { ensureDiameterOutputHeaders_, buildSurveyDataRow_ } = loadHelpers();
+const { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_ } = loadHelpers();
 
 describe("調査データの横径変換", () => {
   it("備考の後に玉1〜玉10を置き、既存列の順序を維持する", () => {
@@ -70,5 +71,40 @@ describe("調査データの横径変換", () => {
     for (const header of ["横径個数", "横径平均", "横径最小", "横径最大"]) {
       expect(row[surveyHeaders.indexOf(header)]).toBe("");
     }
+  });
+
+  it("日付、糖酸、必須項目から従来の派生項目を再生成する", () => {
+    const rawHeaders = ["計測日", "園地名", "品種", "糖度", "酸度"];
+    const rawRow = [new Date(2026, 0, 5), "徳田", "早生", 10.5, 1.5];
+    const surveyHeaders = [
+      "調査日", "園地", "品種", "年度", "年", "月", "調査基準月", "調査区分",
+      "糖度", "酸度", "糖酸比", "データ状態",
+    ];
+
+    const row = buildSurveyDataRow_(rawHeaders, rawRow, surveyHeaders);
+    const value = (header: string) => row[surveyHeaders.indexOf(header)];
+
+    expect(value("年度")).toBe(2025);
+    expect(value("年")).toBe(2026);
+    expect(value("月")).toBe(1);
+    expect(value("調査基準月")).toBe(1);
+    expect(value("調査区分")).toBe("前半");
+    expect(value("糖酸比")).toBe(7);
+    expect(value("データ状態")).toBe("有効");
+  });
+
+  it("25日以降を翌月前半に対応付け、判定不能な値を捏造しない", () => {
+    const rawHeaders = ["計測日", "園地名", "品種", "糖度", "酸度"];
+    const surveyHeaders = ["調査基準月", "調査区分", "糖酸比", "データ状態"];
+    const validRow = buildSurveyDataRow_(
+      rawHeaders,
+      [new Date(2026, 6, 25), "徳田", "早生", 10, 0],
+      surveyHeaders,
+    );
+    const invalidRow = buildSurveyDataRow_(rawHeaders, ["不明", "", "早生", "", 1.2], surveyHeaders);
+
+    expect(validRow).toEqual([8, "前半", "", "有効"]);
+    expect(invalidRow).toEqual(["", "", "", "要確認"]);
+    expect(surveyDateParts_("不明")).toBeNull();
   });
 });
