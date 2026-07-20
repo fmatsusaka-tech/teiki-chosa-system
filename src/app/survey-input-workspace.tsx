@@ -58,6 +58,7 @@ export function SurveyInputWorkspace() {
   });
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
+  const handwrittenInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
   const hasAnalyzedRef = useRef(false);
 
@@ -279,7 +280,7 @@ export function SurveyInputWorkspace() {
 
   const handlePhotos = async (
     event: ChangeEvent<HTMLInputElement>,
-    sourceKind: "photo" | "screenshot",
+    sourceKind: "photo" | "screenshot" | "handwritten",
   ) => {
     const files = Array.from(event.target.files ?? []);
     setPhotoNames(files.map((file) => file.name));
@@ -383,6 +384,9 @@ export function SurveyInputWorkspace() {
           <button type="button" onClick={() => libraryInputRef.current?.click()}>
             スクリーンショットを選択
           </button>
+          <button type="button" onClick={() => handwrittenInputRef.current?.click()}>
+            手書きメモを選択
+          </button>
           <button type="button" disabled={!sourceText} onClick={clearInput}>
             入力を消す
           </button>
@@ -402,6 +406,13 @@ export function SurveyInputWorkspace() {
           type="file"
           accept="image/png,image/jpeg,image/webp"
           onChange={(event) => void handlePhotos(event, "screenshot")}
+        />
+        <input
+          ref={handwrittenInputRef}
+          className="visually-hidden"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(event) => void handlePhotos(event, "handwritten")}
         />
 
         {photoNames.length > 0 && (

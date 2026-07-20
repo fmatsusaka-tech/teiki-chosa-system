@@ -22,6 +22,7 @@ describe("PaddleOcrProvider", () => {
       image: new Uint8Array([1, 2, 3]),
       mimeType: "image/png",
       fileName: "survey.png",
+      sourceKind: "handwritten",
     });
 
     expect(result.rawText).toBe("ゆら早生\n糖度 7.3");
@@ -30,6 +31,9 @@ describe("PaddleOcrProvider", () => {
     expect(fetch).toHaveBeenCalledWith("http://localhost:8765/ocr", expect.objectContaining({
       method: "POST",
     }));
+    const request = fetch.mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({ sourceKind: "handwritten" });
+    expect(result.metadata.sourceKind).toBe("handwritten");
   });
 
   it("reports an unavailable sidecar without throwing", async () => {
