@@ -102,9 +102,8 @@ Invoke-RestMethod http://127.0.0.1:8765/health
 
 CPU版を標準とし、GPU版PaddlePaddleへの置換は利用環境に合わせてPaddlePaddle公式手順を確認する。サイドカーは画像から文字・信頼度・座標を返すだけで、JA固有解析や調査データ保存は行わない。
 
-## 後続PRで実装すること
+## 現在の保留事項
 
-- OpenAI Vision Provider
-- ローカルVLM/LLM Provider
-- OCR結果からJAスクリーンショット用の構造化データへ変換するParser
-- 画像ファイル本体の永続化
+- 実際の手書きメモ画像に合わせた補正パラメータ調整
+- 必要性が確認できた場合の追加OCR Provider
+- 元画像を参照しやすい確認UI

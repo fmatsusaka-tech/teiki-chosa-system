@@ -96,6 +96,26 @@ AIの解析結果は、そのまま保存しません。必ず登録前に確認
 
 テキスト入力、確認・補正、Google Sheets保存基盤、スクリーンショットOCR、手書きメモOCRまで実装済みです。次に必要なのは、Google認証情報と保存先シートを設定した実データ保存確認、および実際の手書きメモ画像による認識調整です。詳細は [TODO.md](TODO.md) と [ROADMAP.md](ROADMAP.md) を参照してください。
 
+## Windowsで操作画面を開く
+
+初回だけ、Node.js依存関係とPaddleOCR環境を準備します。
+
+```powershell
+npm install
+py -3.12 -m venv .venv-paddleocr
+.\.venv-paddleocr\Scripts\python.exe -m pip install -r sidecars/paddleocr/requirements.txt
+```
+
+準備後は、プロジェクトのフォルダーで次の1コマンドを実行します。
+
+```powershell
+npm run dev:local
+```
+
+表示されたらブラウザで `http://localhost:3002/` を開きます。終了するときは、起動した画面で `Ctrl+C` を押します。Webアプリの終了時にPaddleOCRサイドカーも停止します。
+
+Google Sheetsへ保存する場合は、`.env.example`を`.env.local`へコピーし、Google関連の3項目を実行環境に設定します。秘密鍵や認証情報はGitHubやチャットへ貼り付けません。
+
 ## 対象リポジトリ
 
 ```text
