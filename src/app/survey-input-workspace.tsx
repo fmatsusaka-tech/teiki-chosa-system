@@ -10,6 +10,7 @@ import {
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import type { SurveyRecord } from "../domain/survey-record";
+import { hasRequiredSurveyFields } from "../domain/survey-record-registration";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 
 function average(values: number[]): number | null {
@@ -79,14 +80,7 @@ export function SurveyInputWorkspace() {
     () =>
       records.filter(
         (record, index) =>
-          selectedRows.has(index) &&
-          (record.brix === null ||
-            record.acidity === null ||
-            record.diametersMm.length === 0 ||
-            record.measuredAt.trim() === "" ||
-            record.orchard.trim() === "" ||
-            record.variety.trim() === "" ||
-            record.variety === "未設定"),
+          selectedRows.has(index) && !hasRequiredSurveyFields(record),
       ).length,
     [records, selectedRows],
   );
@@ -501,8 +495,8 @@ export function SurveyInputWorkspace() {
                           <span>糖度{record.brix === null ? "（必須）" : ""}</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.1" value={record.brix ?? ""} placeholder="例：12.5" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "brix", event.target.value)} />
                         </label>
-                        <label className={record.acidity === null ? "required-field" : ""}>
-                          <span>酸度{record.acidity === null ? "（必須）" : ""}</span>
+                        <label>
+                          <span>酸度（任意）</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.01" value={record.acidity ?? ""} placeholder="例：0.85" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "acidity", event.target.value)} />
                         </label>
                       </div>
