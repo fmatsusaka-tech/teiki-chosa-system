@@ -17,8 +17,9 @@ import {
 import { registerSurveyRecords } from "../lib/register-survey-records";
 
 function average(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+  const measuredValues = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (measuredValues.length === 0) return null;
+  return measuredValues.reduce((sum, value) => sum + value, 0) / measuredValues.length;
 }
 
 function formatNumber(value: number | null, digits = 1) {
@@ -215,7 +216,7 @@ export function SurveyInputWorkspace() {
   };
 
   const updateDiameter = (recordIndex: number, diameterIndex: number, rawValue: string) => {
-    const value = Number(rawValue);
+    const value = rawValue === "" ? 0 : Number(rawValue);
     if (!Number.isFinite(value)) return;
     setRegistrationStatus({ kind: "idle", message: "" });
     setRecords((current) =>
@@ -225,6 +226,31 @@ export function SurveyInputWorkspace() {
         diametersMm[diameterIndex] = value;
         return { ...record, diametersMm };
       }),
+    );
+  };
+
+  const addDiameter = (recordIndex: number) => {
+    setRegistrationStatus({ kind: "idle", message: "" });
+    setRecords((current) =>
+      current.map((record, index) =>
+        index === recordIndex && record.diametersMm.length < 10
+          ? { ...record, diametersMm: [...record.diametersMm, 0] }
+          : record,
+      ),
+    );
+  };
+
+  const removeDiameter = (recordIndex: number, diameterIndex: number) => {
+    setRegistrationStatus({ kind: "idle", message: "" });
+    setRecords((current) =>
+      current.map((record, index) =>
+        index === recordIndex
+          ? {
+              ...record,
+              diametersMm: record.diametersMm.filter((_, indexToKeep) => indexToKeep !== diameterIndex),
+            }
+          : record,
+      ),
     );
   };
 
@@ -507,11 +533,21 @@ export function SurveyInputWorkspace() {
 
                       <div className="diameter-grid">
                         {record.diametersMm.map((diameter, diameterIndex) => (
-                          <label key={diameterIndex}>
-                            <span>玉{diameterIndex + 1}</span>
-                            <input data-entry-field="true" type="number" inputMode="decimal" step="0.1" value={diameter} onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
-                          </label>
+                          <div className="diameter-field" key={diameterIndex}>
+                            <label>
+                              <span>玉{diameterIndex + 1}</span>
+                              <input data-entry-field="true" type="number" inputMode="decimal" min="0.1" step="0.1" value={diameter > 0 ? diameter : ""} placeholder="横径" onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
+                            </label>
+                            <button type="button" aria-label={`玉${diameterIndex + 1}の横径を削除`} onClick={() => removeDiameter(index, diameterIndex)}>削除</button>
+                          </div>
                         ))}
+                      </div>
+
+                      <div className="diameter-actions">
+                        <button type="button" disabled={record.diametersMm.length >= 10} onClick={() => addDiameter(index)}>
+                          {record.diametersMm.length >= 10 ? "横径は最大10個です" : "横径欄を追加"}
+                        </button>
+                        <span>{record.diametersMm.filter((value) => value > 0).length}/10個入力</span>
                       </div>
 
                       {warnings.length > 0 && (

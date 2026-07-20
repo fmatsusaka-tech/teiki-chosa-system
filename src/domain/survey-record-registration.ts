@@ -6,6 +6,8 @@ export function hasRequiredSurveyFields(record: SurveyRecord): boolean {
     record.variety.trim() !== "" &&
     record.variety !== "未設定" &&
     record.diametersMm.length >= 1 &&
+    record.diametersMm.length <= 10 &&
+    record.diametersMm.every((value) => Number.isFinite(value) && value > 0) &&
     record.brix !== null
   );
 }

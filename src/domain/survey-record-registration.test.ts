@@ -30,6 +30,8 @@ describe("hasRequiredSurveyFields", () => {
     ["品種", { variety: "" }],
     ["未確定品種", { variety: "未設定" }],
     ["横径", { diametersMm: [] }],
+    ["未入力の横径欄", { diametersMm: [0] }],
+    ["11個の横径", { diametersMm: Array(11).fill(40) }],
     ["糖度", { brix: null }],
   ])("%sがない場合は登録できない", (_label, overrides) => {
     expect(hasRequiredSurveyFields({ ...completeRecord, ...overrides })).toBe(false);
