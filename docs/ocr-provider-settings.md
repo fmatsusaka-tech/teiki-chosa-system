@@ -78,10 +78,10 @@ if (!availability.available) {
 
 ## Windowsでのサイドカー起動
 
-PowerShellでPython 3.11の仮想環境を作成し、次の順に実行する。初回起動時にはPaddleOCRの日本語モデルがダウンロードされるため、ネットワーク接続が必要になる。
+PowerShellでPython 3.11または3.12の仮想環境を作成し、次の順に実行する。初回起動時にはPaddleOCRの日本語モデルがダウンロードされるため、ネットワーク接続が必要になる。
 
 ```powershell
-py -3.11 -m venv .venv-paddleocr
+py -3.12 -m venv .venv-paddleocr
 .\.venv-paddleocr\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r sidecars/paddleocr/requirements.txt
