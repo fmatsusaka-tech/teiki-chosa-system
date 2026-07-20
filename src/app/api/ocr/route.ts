@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createOcrProvider, normalizeOcrError, validateOcrImage } from "../../../services/ocr";
 import { SurveyMemoOcrParser } from "../../../services/ocr-parser";
 
+function sourceKind(value: FormDataEntryValue | null) {
+  if (value === "photo" || value === "handwritten") return value;
+  return "screenshot" as const;
+}
+
 export async function POST(request: Request) {
   try {
     const form = await request.formData();
@@ -16,7 +21,7 @@ export async function POST(request: Request) {
     const provider = createOcrProvider();
     const ocrResult = await provider.recognize({
       image: await image.arrayBuffer(), mimeType: image.type, fileName: image.name,
-      sourceKind: form.get("sourceKind") === "photo" ? "photo" : "screenshot",
+      sourceKind: sourceKind(form.get("sourceKind")),
     });
     const parsed = await new SurveyMemoOcrParser().parse({ ocrResult });
     return NextResponse.json(parsed);

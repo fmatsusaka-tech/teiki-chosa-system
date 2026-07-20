@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { OcrResult } from "../ocr";
 import { SurveyMemoOcrParser } from "./survey-memo-ocr-parser";
 
-function ocrResult(rawText: string, confidence: number | null = 0.92): OcrResult {
+function ocrResult(
+  rawText: string,
+  confidence: number | null = 0.92,
+  sourceKind?: "screenshot" | "handwritten",
+): OcrResult {
   return {
     provider: "paddle",
     rawText,
@@ -10,7 +14,7 @@ function ocrResult(rawText: string, confidence: number | null = 0.92): OcrResult
     lines: [],
     confidence,
     warnings: [],
-    metadata: { mode: "economy", processedAt: "2026-07-21T00:00:00.000Z" },
+    metadata: { mode: "economy", processedAt: "2026-07-21T00:00:00.000Z", sourceKind },
   };
 }
 
@@ -67,5 +71,16 @@ describe("SurveyMemoOcrParser", () => {
     });
 
     expect(parsed.candidates[0].warnings.map((item) => item.code)).toContain("LOW_CONFIDENCE");
+  });
+
+  it("手書きメモは原画像との照合を促す", async () => {
+    const parsed = await new SurveyMemoOcrParser().parse({
+      ocrResult: ocrResult("徳田 早生 41.2 糖度8.9", 0.9, "handwritten"),
+    });
+
+    expect(parsed.candidates[0].warnings).toContainEqual(expect.objectContaining({
+      code: "LOW_CONFIDENCE",
+      message: expect.stringContaining("原画像"),
+    }));
   });
 });

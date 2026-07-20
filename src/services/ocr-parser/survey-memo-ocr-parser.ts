@@ -27,6 +27,9 @@ export class SurveyMemoOcrParser implements OcrParser {
       ? [{ code: "LOW_CONFIDENCE" as const, message: "OCRの認識信頼度が低いため、内容を確認してください。" }]
       : [];
     const providerWarnings = input.ocrResult.warnings.map(warning);
+    const handwrittenWarning = input.ocrResult.metadata.sourceKind === "handwritten"
+      ? [{ code: "LOW_CONFIDENCE" as const, message: "手書きメモの認識結果です。数字と園地名を原画像と照合してください。" }]
+      : [];
 
     return ocrParseResultSchema.parse({
       candidates: batch.records.map((record) => ({
@@ -41,7 +44,7 @@ export class SurveyMemoOcrParser implements OcrParser {
         confidence: input.ocrResult.confidence,
         sourceText,
         unparsedText: batch.batchWarnings,
-        warnings: [...record.warnings.map(warning), ...confidenceWarning],
+        warnings: [...record.warnings.map(warning), ...confidenceWarning, ...handwrittenWarning],
       })),
       warnings: providerWarnings,
     });

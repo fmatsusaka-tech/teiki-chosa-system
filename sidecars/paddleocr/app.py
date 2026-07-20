@@ -17,6 +17,21 @@ class OcrRequest(BaseModel):
     imageBase64: str
     mimeType: str
     fileName: str | None = None
+    sourceKind: str | None = None
+
+
+def prepare_image(image_path: Path, source_kind: str | None) -> Any:
+    if source_kind != "handwritten":
+        return str(image_path)
+
+    import cv2
+
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise ValueError("handwritten image could not be decoded")
+    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # 局所コントラストを整え、薄い鉛筆や罫線入り用紙でも文字を残しやすくする。
+    return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(grayscale)
 
 
 def get_ocr() -> Any:
@@ -53,7 +68,7 @@ def recognize(request: OcrRequest) -> dict[str, Any]:
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as image_file:
             image_file.write(image)
             image_path = Path(image_file.name)
-        result = get_ocr().ocr(str(image_path), cls=True)
+        result = get_ocr().ocr(prepare_image(image_path, request.sourceKind), cls=True)
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"PaddleOCR failed: {error}") from error
     finally:
