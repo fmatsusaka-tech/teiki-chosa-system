@@ -3,7 +3,7 @@ import { surveyRecordSchema, type SurveyRecord } from "./survey-record";
 
 export function buildSurveyRecordFromOcr(
   candidate: SurveyParseCandidate,
-  options: { registeredAt: string; source: "photo" | "screenshot" },
+  options: { registeredAt: string; source: "photo" | "screenshot" | "handwritten" },
 ): SurveyRecord {
   return surveyRecordSchema.parse({
     measuredAt: new Date(`${candidate.measuredDate ?? options.registeredAt.slice(0, 10)}T00:00:00.000Z`).toISOString(),
