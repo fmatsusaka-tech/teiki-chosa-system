@@ -62,9 +62,15 @@ function hasSugarAcidPair(tokens: string[]): boolean {
 }
 
 function findMasterName(line: string, masters: readonly SurveyMasterItem[]): string | null {
-  const normalizedLine = line.normalize("NFKC");
+  const normalizedFields = line
+    .normalize("NFKC")
+    .replace(/[、，]/g, ",")
+    .split(/[,\s]+/)
+    .filter(Boolean);
   const match = masters.find((item) =>
-    [item.canonicalName, ...item.aliases].some((name) => normalizedLine.includes(name.normalize("NFKC"))),
+    [item.canonicalName, ...item.aliases].some((name) =>
+      normalizedFields.includes(name.normalize("NFKC")),
+    ),
   );
   return match?.canonicalName ?? null;
 }
@@ -81,12 +87,30 @@ function parseInlineSurveyLine(
   registeredAt: string,
 ): SurveyRecord | null {
   const line = rawLine.normalize("NFKC").replace(/[、，]/g, ",").trim();
-  const orchard = findMasterName(line, orchardMasters);
-  if (!orchard || !/(?:糖度|糖|酸度|酸)/.test(line)) return null;
+  const knownOrchard = findMasterName(line, orchardMasters);
+  const hasMeasurementLabel = /(?:糖度|糖|酸度|酸)/.test(line);
+  const textAfterKnownOrchard = knownOrchard ? line.replace(knownOrchard, "") : line;
+  if (!hasMeasurementLabel && (!knownOrchard || !/\d/.test(textAfterKnownOrchard))) return null;
 
-  const variety = findMasterName(line, varietyMasters) ?? orchardVarietyDefaults[orchard] ?? "未設定";
+  const leadingFields = line.includes(",")
+    ? line.split(",").map((part) => part.trim()).filter(Boolean)
+    : line.split(/\s+/).filter(Boolean);
+  const orchard = knownOrchard ?? leadingFields[0] ?? "";
+  if (!orchard || numberPattern.test(orchard) || /^(?:糖度|糖|酸度|酸)/.test(orchard)) return null;
+
+  const knownVariety = findMasterName(line, varietyMasters);
+  const secondField = leadingFields[1];
+  const possibleVariety = secondField &&
+    !secondField.includes(orchard) &&
+    !numberPattern.test(secondField) &&
+    !/^-?\d/.test(secondField) &&
+    !/(?:糖度|糖|酸度|酸)/.test(secondField) &&
+    !treatmentNames.has(secondField)
+      ? secondField
+      : null;
+  const variety = knownVariety ?? possibleVariety ?? orchardVarietyDefaults[orchard] ?? "未設定";
   const treatment = [...treatmentNames].find((name) => line.includes(name)) ?? null;
-  const firstMeasurementLabel = line.search(/(?:糖度|糖|酸度|酸)/);
+  const firstMeasurementLabel = hasMeasurementLabel ? line.search(/(?:糖度|糖|酸度|酸)/) : -1;
   const diameterSection = firstMeasurementLabel >= 0 ? line.slice(0, firstMeasurementLabel) : line;
   const prefixWithoutNames = [orchard, variety, treatment]
     .filter((value): value is string => Boolean(value))
@@ -117,6 +141,10 @@ function parseInlineSurveyLine(
     .join("・");
 
   if (variety === "未設定") warnings.push("品種を特定できませんでした");
+  if (!knownOrchard) warnings.push(`園地「${orchard}」はマスターに登録されていません`);
+  if (!knownVariety && variety !== "未設定" && orchardVarietyDefaults[orchard] !== variety) {
+    warnings.push(`品種「${variety}」はマスターに登録されていません`);
+  }
   if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
   if (brix === null) warnings.push("糖度が未入力です");
   if (acidity === null) warnings.push("酸度が未入力です");

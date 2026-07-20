@@ -200,6 +200,46 @@ describe("parseSurveyMemo", () => {
     expect(result.records[0].warnings).toContain("横径が3個です");
   });
 
+  it("未知の園地と品種も補正可能な候補として残す", () => {
+    const result = parseSurveyMemo(
+      "寺門 極早生 41.2 42.0 40.8 糖度8.9 酸2.7",
+      "2026-07-20T01:00:00.000Z",
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "寺門",
+      variety: "極早生",
+      diametersMm: [41.2, 42, 40.8],
+      brix: 8.9,
+      acidity: 2.7,
+    });
+    expect(result.records[0].warnings).toEqual(expect.arrayContaining([
+      "園地「寺門」はマスターに登録されていません",
+      "品種「極早生」はマスターに登録されていません",
+    ]));
+  });
+
+  it("糖度と酸度がない1行メモも欠測値付きの候補として残す", () => {
+    const result = parseSurveyMemo(
+      "徳田 早生 41.2 42.0 40.8",
+      "2026-07-20T01:00:00.000Z",
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      orchard: "徳田",
+      variety: "早生",
+      diametersMm: [41.2, 42, 40.8],
+      brix: null,
+      acidity: null,
+    });
+    expect(result.records[0].warnings).toEqual(expect.arrayContaining([
+      "糖度が未入力です",
+      "酸度が未入力です",
+    ]));
+  });
+
   it("複数園地と処理区を9レコードに分割する", () => {
     const result = parseSurveyMemo(memo, "2026-07-18T07:00:00.000Z");
 
