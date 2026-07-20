@@ -98,6 +98,7 @@ export class PaddleOcrProvider implements OcrProvider {
           imageBase64: Buffer.from(bytes).toString("base64"),
           mimeType: input.mimeType,
           fileName: input.fileName,
+          sourceKind: input.sourceKind,
         }),
       });
       if (!response.ok) throw new Error(`PaddleOCR sidecar returned HTTP ${response.status}`);
@@ -119,6 +120,7 @@ export class PaddleOcrProvider implements OcrProvider {
           elapsedMs: payload.elapsedMs,
           model: payload.model,
           rawProvider: "paddleocr-sidecar",
+          sourceKind: input.sourceKind ?? "unknown",
         },
       });
     } catch (cause) {

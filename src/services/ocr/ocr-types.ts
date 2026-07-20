@@ -57,7 +57,7 @@ export type OcrInput = {
   image: ArrayBuffer | Uint8Array;
   mimeType: string;
   fileName?: string;
-  sourceKind?: "screenshot" | "photo" | "pdf" | "unknown";
+  sourceKind?: "screenshot" | "photo" | "handwritten" | "pdf" | "unknown";
 };
 
 export type OcrAvailability =
