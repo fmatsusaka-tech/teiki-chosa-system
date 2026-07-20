@@ -165,6 +165,163 @@ const incompleteMemo = `11/16
 543`;
 
 describe("parseSurveyMemo", () => {
+  it("実メモの処理区切替と末尾備考を解析する", () => {
+    const result = parseSurveyMemo(`11/16
+
+有中
+無処理区
+506
+504
+561
+570
+513
+572
+14.5
+1.1
+
+スキー
+602
+580
+607
+541
+562
+535
+13.5
+1.2
+受精よし`, "2026-07-20T01:00:00.000Z");
+
+    expect(result.records).toHaveLength(2);
+    expect(result.records[0]).toMatchObject({
+      measuredAt: "2026-11-16T00:00:00.000Z",
+      orchard: "有中",
+      variety: "ゆら早生",
+      notes: "無処理区",
+      diametersMm: [50.6, 50.4, 56.1, 57, 51.3, 57.2],
+      brix: 14.5,
+      acidity: 1.1,
+    });
+    expect(result.records[1]).toMatchObject({
+      measuredAt: "2026-11-16T00:00:00.000Z",
+      orchard: "有中",
+      variety: "ゆら早生",
+      notes: "スキー・受精よし",
+      diametersMm: [60.2, 58, 60.7, 54.1, 56.2, 53.5],
+      brix: 13.5,
+      acidity: 1.2,
+    });
+    expect(result.batchWarnings).toEqual([]);
+  });
+
+  it("糖度のみの行と未知の園地を含む実メモを候補として分割する", () => {
+    const result = parseSurveyMemo(`吉川
+461
+570
+561
+571
+523
+573
+13.4
+1.3
+着色良い
+
+なる1
+546
+476
+601
+597
+622
+632
+12.4
+0.8
+
+なる2
+742
+724
+825
+715
+763
+800
+売り物サイズを検査
+10.9
+0.9
+
+上中島
+720
+617
+643
+683
+687
+622
+
+下町
+717
+614
+754
+730
+11.4
+
+徳田
+カリウム
+734
+-681
+642
+543
+12.5
+1.3
+
+尾中
+618
+722
+634
+572
+670
+10.5`, "2026-07-20T01:00:00.000Z");
+
+    expect(result.records).toHaveLength(7);
+    expect(result.records[0]).toMatchObject({
+      orchard: "吉川",
+      notes: "着色良い",
+      diametersMm: [46.1, 57, 56.1, 57.1, 52.3, 57.3],
+      brix: 13.4,
+      acidity: 1.3,
+    });
+    expect(result.records[2]).toMatchObject({
+      orchard: "なる2",
+      notes: "売り物サイズを検査",
+      diametersMm: [74.2, 72.4, 82.5, 71.5, 76.3, 80],
+      brix: 10.9,
+      acidity: 0.9,
+    });
+    expect(result.records[3]).toMatchObject({
+      orchard: "上中島",
+      diametersMm: [72, 61.7, 64.3, 68.3, 68.7, 62.2],
+      brix: null,
+      acidity: null,
+    });
+    expect(result.records[4]).toMatchObject({
+      orchard: "下町",
+      diametersMm: [71.7, 61.4, 75.4, 73],
+      brix: 11.4,
+      acidity: null,
+    });
+    expect(result.records[4].warnings).not.toContain("糖度が未入力です");
+    expect(result.records[5]).toMatchObject({
+      orchard: "徳田",
+      notes: "カリウム",
+      diametersMm: [73.4, 68.1, 64.2, 54.3],
+      brix: 12.5,
+      acidity: 1.3,
+    });
+    expect(result.records[6]).toMatchObject({
+      orchard: "尾中",
+      variety: "未設定",
+      diametersMm: [61.8, 72.2, 63.4, 57.2, 67],
+      brix: 10.5,
+      acidity: null,
+    });
+    expect(result.batchWarnings).toContain("園地「尾中」はマスターに登録されていません");
+  });
+
   it("カンマ区切りの1行メモを解析する", () => {
     const result = parseSurveyMemo(
       "2026/7/20\n徳田、早生、39.6-40.5-42.7-40.0-32.9、糖度8.4、酸度3.8、やや小玉",

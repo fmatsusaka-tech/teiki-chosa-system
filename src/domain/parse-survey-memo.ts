@@ -61,6 +61,20 @@ function hasSugarAcidPair(tokens: string[]): boolean {
   );
 }
 
+function hasBrixOnly(tokens: string[]): boolean {
+  if (tokens.length < 2) return false;
+  const brixToken = tokens.at(-1) ?? "";
+  const brix = Number(brixToken);
+  const precedingTokens = tokens.slice(0, -1);
+
+  return (
+    brixToken.includes(".") &&
+    brix >= 4 &&
+    brix <= 30 &&
+    precedingTokens.every((token) => Math.abs(Number(token)) >= 100)
+  );
+}
+
 function findMasterName(line: string, masters: readonly SurveyMasterItem[]): string | null {
   const normalizedFields = line
     .normalize("NFKC")
@@ -187,9 +201,15 @@ export function parseSurveyMemo(
 
     const warnings: string[] = [];
     const sugarAcidPresent = hasSugarAcidPair(numericLines);
+    const brixOnlyPresent = !sugarAcidPresent && hasBrixOnly(numericLines);
     const brix = sugarAcidPresent ? Number(numericLines.at(-2)) : null;
     const acidity = sugarAcidPresent ? Number(numericLines.at(-1)) : null;
-    const diameterTokens = sugarAcidPresent ? numericLines.slice(0, -2) : numericLines;
+    const normalizedBrix = brixOnlyPresent ? Number(numericLines.at(-1)) : brix;
+    const diameterTokens = sugarAcidPresent
+      ? numericLines.slice(0, -2)
+      : brixOnlyPresent
+        ? numericLines.slice(0, -1)
+        : numericLines;
     const diametersMm = diameterTokens.map((token) => {
       const parsed = parseDiameter(token);
       if (parsed.warning) warnings.push(parsed.warning);
@@ -199,7 +219,7 @@ export function parseSurveyMemo(
     const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
-    if (brix === null) warnings.push("糖度が未入力です");
+    if (normalizedBrix === null) warnings.push("糖度が未入力です");
     if (acidity === null) warnings.push("酸度が未入力です");
 
     const notes = [currentTreatment, ...currentNotes].filter(Boolean).join("・");
@@ -210,7 +230,7 @@ export function parseSurveyMemo(
       orchard: currentOrchard,
       variety,
       diametersMm,
-      brix,
+      brix: normalizedBrix,
       acidity,
       notes,
       source: "text",
@@ -222,7 +242,8 @@ export function parseSurveyMemo(
     currentNotes = [];
   };
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     if (fullDatePattern.test(line) || shortDatePattern.test(line)) {
       measuredAt = normalizeDate(line, registeredAt);
       continue;
@@ -256,6 +277,20 @@ export function parseSurveyMemo(
       currentOrchard = normalized;
       currentTreatment = "";
       currentNotes = [];
+      continue;
+    }
+
+    const nextLine = lines[lineIndex + 1];
+    if (
+      nextLine &&
+      numberPattern.test(nextLine) &&
+      (!currentOrchard || hasSugarAcidPair(numericLines))
+    ) {
+      flush();
+      currentOrchard = normalized;
+      currentTreatment = "";
+      currentNotes = [];
+      batchWarnings.push(`園地「${line}」はマスターに登録されていません`);
       continue;
     }
 
