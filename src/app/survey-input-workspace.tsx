@@ -151,6 +151,44 @@ export function SurveyInputWorkspace() {
     });
   };
 
+  const addBlankRecord = () => {
+    const now = new Date().toISOString();
+    const index = records.length;
+    const record: SurveyRecord = {
+      measuredAt: records[0]?.measuredAt ?? now,
+      registeredAt: now,
+      orchard: "",
+      variety: "",
+      treatment: null,
+      diametersMm: [],
+      brix: null,
+      acidity: null,
+      notes: "",
+      source: "text",
+      confidence: null,
+      warnings: ["手動で追加した候補です。必須項目を確認してください"],
+    };
+
+    setRecords((current) => [...current, record]);
+    setSelectedRows((current) => new Set([...current, index]));
+    setExpandedRows((current) => new Set([...current, index]));
+    setRegistrationStatus({ kind: "idle", message: "" });
+  };
+
+  const removeRecord = (index: number) => {
+    const withoutIndex = (values: Set<number>) =>
+      new Set(
+        [...values]
+          .filter((value) => value !== index)
+          .map((value) => (value > index ? value - 1 : value)),
+      );
+
+    setRecords((current) => current.filter((_, recordIndex) => recordIndex !== index));
+    setSelectedRows((current) => withoutIndex(current));
+    setExpandedRows((current) => withoutIndex(current));
+    setRegistrationStatus({ kind: "idle", message: "" });
+  };
+
   const updateRecord = <K extends keyof SurveyRecord>(
     index: number,
     field: K,
@@ -360,6 +398,7 @@ export function SurveyInputWorkspace() {
             <div className="summary-badges">
               <span className="status">全{records.length}件</span>
               {warningCount > 0 && <span className="warning-badge">要確認 {warningCount}件</span>}
+              <button type="button" onClick={addBlankRecord}>空の候補を追加</button>
             </div>
           </div>
 
@@ -464,6 +503,12 @@ export function SurveyInputWorkspace() {
                           {warnings.map((warning) => <li key={warning}>{warning}</li>)}
                         </ul>
                       )}
+
+                      <div className="record-actions">
+                        <button type="button" onClick={() => removeRecord(index)}>
+                          この候補を削除
+                        </button>
+                      </div>
                     </div>
                   )}
                 </article>
