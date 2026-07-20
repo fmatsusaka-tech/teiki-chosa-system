@@ -11,7 +11,7 @@ export function buildSurveyRecordFromOcr(
     orchard: candidate.orchard ?? "",
     variety: candidate.variety ?? "",
     treatment: candidate.treatment,
-    diametersMm: candidate.diametersMm ?? [],
+    diametersMm: candidate.diametersMm?.slice(0, 10) ?? [],
     brix: candidate.brix,
     acidity: candidate.acidity,
     notes: candidate.notes ?? "",

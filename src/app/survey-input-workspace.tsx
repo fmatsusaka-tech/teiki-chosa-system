@@ -29,7 +29,7 @@ function visibleWarnings(record: SurveyRecord): string[] {
   return record.warnings.filter((warning) => {
     if (warning === "糖度が未入力です" && record.brix !== null) return false;
     if (warning === "酸度が未入力です" && record.acidity !== null) return false;
-    if (warning.startsWith("横径が") && record.diametersMm.length >= 5) return false;
+    if (warning === "横径が未入力です" && record.diametersMm.length >= 1) return false;
     if (warning === "品種を特定できませんでした" && record.variety !== "未設定") return false;
     if (warning === "調査日が未入力のため、登録日を使用します" && record.measuredAt) return false;
     return true;
@@ -74,8 +74,8 @@ export function SurveyInputWorkspace() {
     [records],
   );
 
-  const shortDiameterCount = useMemo(
-    () => records.filter((record) => record.diametersMm.length < 5).length,
+  const missingDiameterCount = useMemo(
+    () => records.filter((record) => record.diametersMm.length === 0).length,
     [records],
   );
 
@@ -406,11 +406,11 @@ export function SurveyInputWorkspace() {
             </div>
           </div>
 
-          {(missingBrixCount > 0 || missingAcidityCount > 0 || shortDiameterCount > 0) && (
+          {(missingBrixCount > 0 || missingAcidityCount > 0 || missingDiameterCount > 0) && (
             <div className="issue-summary" role="alert">
               {missingBrixCount > 0 && <span>糖度未入力：{missingBrixCount}件</span>}
               {missingAcidityCount > 0 && <span>酸度未入力：{missingAcidityCount}件</span>}
-              {shortDiameterCount > 0 && <span>横径不足：{shortDiameterCount}件</span>}
+              {missingDiameterCount > 0 && <span>横径未入力：{missingDiameterCount}件</span>}
             </div>
           )}
 

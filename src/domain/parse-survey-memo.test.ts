@@ -358,7 +358,7 @@ describe("parseSurveyMemo", () => {
       brix: 8.4,
       acidity: 2.7,
     });
-    expect(result.records[0].warnings).toContain("横径が3個です");
+    expect(result.records[0].warnings).not.toContain("横径が未入力です");
   });
 
   it("未知の園地と品種も補正可能な候補として残す", () => {
@@ -437,14 +437,24 @@ describe("parseSurveyMemo", () => {
     });
   });
 
-  it("横径数の不足と不自然な負数を警告する", () => {
+  it("横径が1個以上なら不足警告を出さず、不自然な負数だけ警告する", () => {
     const result = parseSurveyMemo(memo);
     const shimomachi = result.records.find((record) => record.orchard === "下町");
     const tokuda = result.records.find((record) => record.orchard === "徳田");
 
-    expect(shimomachi?.warnings).toContain("横径が4個です");
+    expect(shimomachi?.warnings).not.toContain("横径が未入力です");
     expect(tokuda?.diametersMm).toEqual([73.4, 68.1, 64.2, 54.3]);
     expect(tokuda?.warnings.some((warning) => warning.includes("-681"))).toBe(true);
+  });
+
+  it("横径が11個以上なら先頭10個に制限して警告する", () => {
+    const result = parseSurveyMemo(
+      "徳田 早生 41 42 43 44 45 46 47 48 49 50 51 糖度10.5 酸1.0",
+      "2026-07-21T01:00:00.000Z",
+    );
+
+    expect(result.records[0].diametersMm).toEqual([41, 42, 43, 44, 45, 46, 47, 48, 49, 50]);
+    expect(result.records[0].warnings).toContain("横径が11個あるため、先頭10個を使用します");
   });
 
   it("糖度と酸度が無い入力では横径を削らず未入力警告を付ける", () => {

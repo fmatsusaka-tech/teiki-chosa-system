@@ -60,7 +60,10 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
         <span>{candidates.length}件</span>
       </div>
       {candidates.map((candidate, index) => {
-        const diameterValues = [...(candidate.diametersMm?.map(String) ?? []), ""];
+        const existingDiameterValues = candidate.diametersMm?.slice(0, 10).map(String) ?? [];
+        const diameterValues = existingDiameterValues.length < 10
+          ? [...existingDiameterValues, ""]
+          : existingDiameterValues;
         return (
           <fieldset className="review-candidate" key={index}>
             <legend>候補 {index + 1}</legend>

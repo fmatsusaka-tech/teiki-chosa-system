@@ -20,6 +20,24 @@ describe("surveyRecordSchema", () => {
     expect(result.diametersMm).toHaveLength(3);
   });
 
+  it("横径は最大10個まで受け付ける", () => {
+    const base = {
+      measuredAt: "2026-07-21T00:00:00.000Z",
+      registeredAt: "2026-07-21T01:00:00.000Z",
+      orchard: "徳田",
+      variety: "早生",
+      brix: 10.5,
+      acidity: null,
+      notes: "",
+      source: "text" as const,
+      confidence: 1,
+      warnings: [],
+    };
+
+    expect(surveyRecordSchema.safeParse({ ...base, diametersMm: Array(10).fill(40) }).success).toBe(true);
+    expect(surveyRecordSchema.safeParse({ ...base, diametersMm: Array(11).fill(40) }).success).toBe(false);
+  });
+
   it("rejects an empty orchard name", () => {
     const result = surveyRecordSchema.safeParse({
       measuredAt: "2026-07-18T06:00:00.000Z",

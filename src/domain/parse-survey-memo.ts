@@ -133,11 +133,15 @@ function parseInlineSurveyLine(
     (match) => match[0],
   );
   const warnings: string[] = [];
-  const diametersMm = diameterTokens.map((token) => {
+  const parsedDiameters = diameterTokens.map((token) => {
     const parsed = parseDiameter(token);
     if (parsed.warning) warnings.push(parsed.warning);
     return parsed.value;
   });
+  if (parsedDiameters.length > 10) {
+    warnings.push(`横径が${parsedDiameters.length}個あるため、先頭10個を使用します`);
+  }
+  const diametersMm = parsedDiameters.slice(0, 10);
   const brix = parseLabelledNumber(line, ["糖度", "糖"]);
   const acidity = parseLabelledNumber(line, ["酸度", "酸"]);
 
@@ -157,7 +161,7 @@ function parseInlineSurveyLine(
   if (!knownVariety && variety !== "未設定" && orchardVarietyDefaults[orchard] !== variety) {
     warnings.push(`品種「${variety}」はマスターに登録されていません`);
   }
-  if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
+  if (diametersMm.length === 0) warnings.push("横径が未入力です");
   if (!measuredAt) warnings.push("調査日が未入力のため、登録日を使用します");
   if (brix === null) warnings.push("糖度が未入力です");
   if (acidity === null) warnings.push("酸度が未入力です");
@@ -209,15 +213,19 @@ export function parseSurveyMemo(
       : brixOnlyPresent
         ? numericLines.slice(0, -1)
         : numericLines;
-    const diametersMm = diameterTokens.map((token) => {
+    const parsedDiameters = diameterTokens.map((token) => {
       const parsed = parseDiameter(token);
       if (parsed.warning) warnings.push(parsed.warning);
       return parsed.value;
     });
+    if (parsedDiameters.length > 10) {
+      warnings.push(`横径が${parsedDiameters.length}個あるため、先頭10個を使用します`);
+    }
+    const diametersMm = parsedDiameters.slice(0, 10);
 
     const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
-    if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
+    if (diametersMm.length === 0) warnings.push("横径が未入力です");
     if (!measuredAt) warnings.push("調査日が未入力のため、登録日を使用します");
     if (normalizedBrix === null) warnings.push("糖度が未入力です");
     if (acidity === null) warnings.push("酸度が未入力です");

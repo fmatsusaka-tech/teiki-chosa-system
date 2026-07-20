@@ -14,7 +14,7 @@ export const surveyParseCandidateSchema = z.object({
   orchard: z.string().min(1).nullable(),
   variety: z.string().min(1).nullable(),
   treatment: z.string().min(1).nullable(),
-  diametersMm: z.array(z.number().positive()).nullable(),
+  diametersMm: z.array(z.number().positive()).max(10).nullable(),
   brix: z.number().nonnegative().nullable(),
   acidity: z.number().nonnegative().nullable(),
   notes: z.string().min(1).nullable(),
