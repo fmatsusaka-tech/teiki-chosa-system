@@ -165,6 +165,41 @@ const incompleteMemo = `11/16
 543`;
 
 describe("parseSurveyMemo", () => {
+  it("カンマ区切りの1行メモを解析する", () => {
+    const result = parseSurveyMemo(
+      "2026/7/20\n徳田、早生、39.6-40.5-42.7-40.0-32.9、糖度8.4、酸度3.8、やや小玉",
+      "2026-07-20T01:00:00.000Z",
+    );
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      measuredAt: "2026-07-20T00:00:00.000Z",
+      orchard: "徳田",
+      variety: "早生",
+      diametersMm: [39.6, 40.5, 42.7, 40, 32.9],
+      brix: 8.4,
+      acidity: 3.8,
+      notes: "やや小玉",
+    });
+  });
+
+  it("改行された複数園地の1行メモを解析する", () => {
+    const result = parseSurveyMemo([
+      "7/20",
+      "徳田 早生 39.6 40.5 42.7 糖度8.4 酸2.7",
+      "下町 早生 41.2 42.0 40.8 糖度8.9 酸2.7",
+    ].join("\n"), "2026-07-20T01:00:00.000Z");
+
+    expect(result.records).toHaveLength(2);
+    expect(result.records.map((record) => record.orchard)).toEqual(["徳田", "下町"]);
+    expect(result.records[0]).toMatchObject({
+      diametersMm: [39.6, 40.5, 42.7],
+      brix: 8.4,
+      acidity: 2.7,
+    });
+    expect(result.records[0].warnings).toContain("横径が3個です");
+  });
+
   it("複数園地と処理区を9レコードに分割する", () => {
     const result = parseSurveyMemo(memo, "2026-07-18T07:00:00.000Z");
 
