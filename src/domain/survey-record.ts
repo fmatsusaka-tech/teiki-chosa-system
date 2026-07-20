@@ -11,7 +11,7 @@ export const surveyRecordSchema = z.object({
   brix: z.number().nonnegative().nullable(),
   acidity: z.number().nonnegative().nullable(),
   notes: z.string().default(""),
-  source: z.enum(["text", "voice", "screenshot", "photo", "pdf"]),
+  source: z.enum(["text", "voice", "screenshot", "photo", "handwritten", "pdf"]),
   confidence: z.number().min(0).max(1).nullable(),
   warnings: z.array(z.string()).default([]),
 });

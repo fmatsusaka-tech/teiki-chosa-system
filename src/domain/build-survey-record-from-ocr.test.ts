@@ -38,4 +38,12 @@ describe("buildSurveyRecordFromOcr", () => {
 
     expect(record.measuredAt).toBe("2026-07-21T00:00:00.000Z");
   });
+
+  it("preserves handwritten as the OCR input source", () => {
+    const record = buildSurveyRecordFromOcr(candidate, {
+      registeredAt: "2026-07-21T15:30:00.000Z", source: "handwritten",
+    });
+
+    expect(record.source).toBe("handwritten");
+  });
 });

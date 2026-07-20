@@ -15,7 +15,7 @@ interface SurveyRecord {
   acidity: number | null;
   remarks: string;
   registeredAt: string; // ISO 8601
-  sourceType: "text" | "voice" | "screenshot" | "photo" | "pdf";
+  sourceType: "text" | "voice" | "screenshot" | "photo" | "handwritten" | "pdf";
   sourceText: string;
   warnings: ParseWarning[];
 }

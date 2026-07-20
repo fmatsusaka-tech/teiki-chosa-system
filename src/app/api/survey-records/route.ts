@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buildSurveyRecordFromOcr } from "../../../domain/build-survey-record-from-ocr";
-import { surveyParseCandidateSchema } from "../../../services/ocr-parser";
 import {
   GoogleSheetsRestClient, GoogleSheetsSurveyRecordPersistence, saveSurveyRecords,
   SurveyRecordPersistenceError,
 } from "../../../services/survey-record-persistence";
-
-const requestSchema = z.object({
-  candidates: z.array(surveyParseCandidateSchema).min(1),
-  warningsConfirmed: z.literal(true),
-  sourceKind: z.enum(["photo", "screenshot"]).default("photo"),
-});
+import { surveyRecordsRequestSchema } from "./request-schema";
 
 export async function POST(request: Request) {
   try {
-    const body = requestSchema.parse(await request.json());
+    const body = surveyRecordsRequestSchema.parse(await request.json());
     const now = new Date().toISOString();
     const records = body.candidates.map((candidate) => buildSurveyRecordFromOcr(candidate, {
       registeredAt: now, source: body.sourceKind,

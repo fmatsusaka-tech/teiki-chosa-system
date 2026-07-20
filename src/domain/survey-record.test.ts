@@ -53,4 +53,22 @@ describe("surveyRecordSchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("accepts handwritten as an image input source", () => {
+    const result = surveyRecordSchema.safeParse({
+      measuredAt: "2026-07-21T00:00:00.000Z",
+      registeredAt: "2026-07-21T01:00:00.000Z",
+      orchard: "徳田",
+      variety: "早生",
+      diametersMm: [40.1],
+      brix: 10.5,
+      acidity: null,
+      notes: "手書きから補正",
+      source: "handwritten",
+      confidence: 0.7,
+      warnings: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
 });
