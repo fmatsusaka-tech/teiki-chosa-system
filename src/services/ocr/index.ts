@@ -1,5 +1,6 @@
 export { createOcrRuntimeConfig } from "./config";
 export { createOcrProvider, createOcrProviderSelection } from "./factory";
+export { validateOcrImage } from "./ocr-image-input";
 export { OcrProviderError, normalizeOcrError } from "./ocr-error";
 export type { OcrProvider } from "./ocr-provider";
 export { PaddleOcrProvider } from "./paddle-ocr-provider";

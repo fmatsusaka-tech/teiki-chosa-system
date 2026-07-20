@@ -4,20 +4,28 @@ import { parseOptionalDiameters, parseOptionalNumber, validateReviewCandidate } 
 
 const candidate: SurveyParseCandidate = {
   measuredDate: "2026-07-19", orchard: "徳田", variety: "早生", treatment: null,
-  diametersMm: null, brix: null, acidity: null, notes: null, confidence: null,
+  diametersMm: [40.1], brix: 10.5, acidity: null, notes: null, confidence: null,
   sourceText: "", unparsedText: [], warnings: [],
 };
 
 describe("OCR review form", () => {
-  it("accepts a candidate when the three required fields exist", () => {
+  it("accepts a candidate when orchard, variety, diameter and brix exist", () => {
     expect(validateReviewCandidate(candidate)).toEqual({});
   });
 
-  it("reports only missing required fields and permits missing measurements", () => {
-    expect(validateReviewCandidate({ ...candidate, measuredDate: null, orchard: null, variety: null })).toEqual({
-      measuredDate: "調査日を入力してください",
+  it("permits a missing date and acidity but requires measurements", () => {
+    expect(validateReviewCandidate({
+      ...candidate,
+      measuredDate: null,
+      orchard: null,
+      variety: null,
+      diametersMm: null,
+      brix: null,
+    })).toEqual({
       orchard: "園地を選択してください",
       variety: "品種を選択してください",
+      diametersMm: "横径を1個以上入力してください",
+      brix: "糖度を入力してください",
     });
   });
 

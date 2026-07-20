@@ -46,13 +46,19 @@ def recognize(request: OcrRequest) -> dict[str, Any]:
 
     suffix = Path(request.fileName or "image.png").suffix or ".png"
     started = time.perf_counter()
+    image_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=suffix) as image_file:
+        # Windowsでは開いたままのNamedTemporaryFileを別処理から読み取れないため、
+        # OCRへ渡す前にファイルを閉じ、処理後に明示的に削除する。
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as image_file:
             image_file.write(image)
-            image_file.flush()
-            result = get_ocr().ocr(image_file.name, cls=True)
+            image_path = Path(image_file.name)
+        result = get_ocr().ocr(str(image_path), cls=True)
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"PaddleOCR failed: {error}") from error
+    finally:
+        if image_path is not None:
+            image_path.unlink(missing_ok=True)
 
     lines = []
     for page in result or []:

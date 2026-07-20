@@ -6,12 +6,12 @@ export function buildSurveyRecordFromOcr(
   options: { registeredAt: string; source: "photo" | "screenshot" },
 ): SurveyRecord {
   return surveyRecordSchema.parse({
-    measuredAt: candidate.measuredDate ? new Date(`${candidate.measuredDate}T00:00:00.000Z`).toISOString() : "",
+    measuredAt: new Date(`${candidate.measuredDate ?? options.registeredAt.slice(0, 10)}T00:00:00.000Z`).toISOString(),
     registeredAt: options.registeredAt,
     orchard: candidate.orchard ?? "",
     variety: candidate.variety ?? "",
     treatment: candidate.treatment,
-    diametersMm: candidate.diametersMm ?? [],
+    diametersMm: candidate.diametersMm?.slice(0, 10) ?? [],
     brix: candidate.brix,
     acidity: candidate.acidity,
     notes: candidate.notes ?? "",

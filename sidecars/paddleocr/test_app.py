@@ -1,4 +1,5 @@
 import base64
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +26,8 @@ class PaddleOcrSidecarTest(unittest.TestCase):
             "fileName": "survey.png",
         })
         self.assertEqual(response.status_code, 200)
+        image_path = Path(get_ocr.return_value.ocr.call_args.args[0])
+        self.assertFalse(image_path.exists())
         self.assertEqual(response.json()["lines"][0], {
             "text": "糖度 7.3",
             "confidence": 0.92,

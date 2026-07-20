@@ -100,7 +100,7 @@ export class RuleBasedOcrParser implements OcrParser {
         orchard,
         variety,
         treatment: get("処理区"),
-        diametersMm: diametersMm?.length ? diametersMm : null,
+        diametersMm: diametersMm?.length ? diametersMm.slice(0, 10) : null,
         brix: parseNumber(get("糖度", "糖")),
         acidity: parseNumber(get("酸度", "酸")),
         notes: get("備考"),

@@ -1,18 +1,22 @@
 import type { ParsedSurveyBatch, SurveyRecord } from "./survey-record";
-import { orchardMasters, orchardVarietyDefaults } from "./survey-masters";
+import {
+  orchardMasters,
+  orchardVarietyDefaults,
+  varietyMasters,
+  type SurveyMasterItem,
+} from "./survey-masters";
 
 const orchardNames = new Set(orchardMasters.flatMap((item) => [item.canonicalName, ...item.aliases]).map(normalizeOrchard));
-const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ"]);
+const treatmentNames = new Set(["無処理区", "スキー", "ミヨビ", "カリウム"]);
 const fullDatePattern = /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/;
 const shortDatePattern = /^\d{1,2}[/-]\d{1,2}$/;
 const numberPattern = /^-?\d+(?:\.\d+)?$/;
+const labelledMeasurementPattern = /(?:糖度|糖|酸度|酸)\s*[:：]?\s*-?\d+(?:\.\d+)?/;
 
-function normalizeDate(value: string, registeredAt: string): string {
+function normalizeDate(value: string): string {
   const parts = value.split(/[/-]/).map(Number);
-  const [year, month, day] =
-    parts.length === 3
-      ? parts
-      : [new Date(registeredAt).getUTCFullYear(), parts[0], parts[1]];
+  if (parts.length !== 3) return "";
+  const [year, month, day] = parts;
   return new Date(Date.UTC(year, month - 1, day)).toISOString();
 }
 
@@ -55,6 +59,129 @@ function hasSugarAcidPair(tokens: string[]): boolean {
   );
 }
 
+function hasBrixOnly(tokens: string[]): boolean {
+  if (tokens.length < 2) return false;
+  const brixToken = tokens.at(-1) ?? "";
+  const brix = Number(brixToken);
+  const precedingTokens = tokens.slice(0, -1);
+
+  return (
+    brixToken.includes(".") &&
+    brix >= 4 &&
+    brix <= 30 &&
+    precedingTokens.every((token) => Math.abs(Number(token)) >= 100)
+  );
+}
+
+function findMasterName(line: string, masters: readonly SurveyMasterItem[]): string | null {
+  const normalizedFields = line
+    .normalize("NFKC")
+    .replace(/[、，]/g, ",")
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  const match = masters.find((item) =>
+    [item.canonicalName, ...item.aliases].some((name) =>
+      normalizedFields.includes(name.normalize("NFKC")),
+    ),
+  );
+  return match?.canonicalName ?? null;
+}
+
+function parseLabelledNumber(line: string, labels: readonly string[]): number | null {
+  const pattern = new RegExp(`(?:${labels.join("|")})\\s*[:：]?\\s*(-?\\d+(?:\\.\\d+)?)`);
+  const match = line.match(pattern);
+  return match ? Number(match[1]) : null;
+}
+
+function parseInlineSurveyLine(
+  rawLine: string,
+  measuredAt: string,
+  registeredAt: string,
+): SurveyRecord | null {
+  const line = rawLine.normalize("NFKC").replace(/[、，]/g, ",").trim();
+  const knownOrchard = findMasterName(line, orchardMasters);
+  const hasMeasurementLabel = /(?:糖度|糖|酸度|酸)/.test(line);
+  const textAfterKnownOrchard = knownOrchard ? line.replace(knownOrchard, "") : line;
+  if (!hasMeasurementLabel && (!knownOrchard || !/\d/.test(textAfterKnownOrchard))) return null;
+
+  const leadingFields = line.includes(",")
+    ? line.split(",").map((part) => part.trim()).filter(Boolean)
+    : line.split(/\s+/).filter(Boolean);
+  const orchard = knownOrchard ?? leadingFields[0] ?? "";
+  if (!orchard || numberPattern.test(orchard) || /^(?:糖度|糖|酸度|酸)/.test(orchard)) return null;
+
+  const knownVariety = findMasterName(line, varietyMasters);
+  const secondField = leadingFields[1];
+  const possibleVariety = secondField &&
+    !secondField.includes(orchard) &&
+    !numberPattern.test(secondField) &&
+    !/^-?\d/.test(secondField) &&
+    !/(?:糖度|糖|酸度|酸)/.test(secondField) &&
+    !treatmentNames.has(secondField)
+      ? secondField
+      : null;
+  const variety = knownVariety ?? possibleVariety ?? orchardVarietyDefaults[orchard] ?? "未設定";
+  const treatment = [...treatmentNames].find((name) => line.includes(name)) ?? null;
+  const firstMeasurementLabel = hasMeasurementLabel ? line.search(/(?:糖度|糖|酸度|酸)/) : -1;
+  const diameterSection = firstMeasurementLabel >= 0 ? line.slice(0, firstMeasurementLabel) : line;
+  const prefixWithoutNames = [orchard, variety, treatment]
+    .filter((value): value is string => Boolean(value))
+    .reduce((value, name) => value.replace(name, " "), diameterSection);
+  const normalizedDiameterSection = prefixWithoutNames.replace(/(?<=\d)-(?=\d)/g, " ");
+  const diameterTokens = Array.from(
+    normalizedDiameterSection.matchAll(/-?\d+(?:\.\d+)?/g),
+    (match) => match[0],
+  );
+  const warnings: string[] = [];
+  const parsedDiameters = diameterTokens.map((token) => {
+    const parsed = parseDiameter(token);
+    if (parsed.warning) warnings.push(parsed.warning);
+    return parsed.value;
+  });
+  if (parsedDiameters.length > 10) {
+    warnings.push(`横径が${parsedDiameters.length}個あるため、先頭10個を使用します`);
+  }
+  const diametersMm = parsedDiameters.slice(0, 10);
+  const brix = parseLabelledNumber(line, ["糖度", "糖"]);
+  const acidity = parseLabelledNumber(line, ["酸度", "酸"]);
+
+  const notes = line
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !part.includes(orchard))
+    .filter((part) => !part.includes(variety))
+    .filter((part) => !treatment || !part.includes(treatment))
+    .filter((part) => !labelledMeasurementPattern.test(part))
+    .filter((part) => !/^-?\d+(?:\.\d+)?(?:\s*[-ー]\s*-?\d+(?:\.\d+)?)*$/.test(part))
+    .join("・");
+
+  if (variety === "未設定") warnings.push("品種を特定できませんでした");
+  if (!knownOrchard) warnings.push(`園地「${orchard}」はマスターに登録されていません`);
+  if (!knownVariety && variety !== "未設定" && orchardVarietyDefaults[orchard] !== variety) {
+    warnings.push(`品種「${variety}」はマスターに登録されていません`);
+  }
+  if (diametersMm.length === 0) warnings.push("横径が未入力です");
+  if (!measuredAt) warnings.push("調査日が未入力のため、登録日を使用します");
+  if (brix === null) warnings.push("糖度が未入力です");
+  if (acidity === null) warnings.push("酸度が未入力です");
+
+  return {
+    measuredAt,
+    registeredAt,
+    orchard,
+    variety,
+    treatment,
+    diametersMm,
+    brix,
+    acidity,
+    notes,
+    source: "text",
+    confidence: warnings.length === 0 ? 1 : 0.8,
+    warnings,
+  };
+}
+
 export function parseSurveyMemo(
   sourceText: string,
   registeredAt = new Date().toISOString(),
@@ -64,7 +191,7 @@ export function parseSurveyMemo(
     .map((line) => line.trim())
     .filter(Boolean);
 
-  let measuredAt = registeredAt;
+  let measuredAt = "";
   let currentOrchard = "";
   let currentTreatment = "";
   let currentNotes: string[] = [];
@@ -77,30 +204,42 @@ export function parseSurveyMemo(
 
     const warnings: string[] = [];
     const sugarAcidPresent = hasSugarAcidPair(numericLines);
+    const brixOnlyPresent = !sugarAcidPresent && hasBrixOnly(numericLines);
     const brix = sugarAcidPresent ? Number(numericLines.at(-2)) : null;
     const acidity = sugarAcidPresent ? Number(numericLines.at(-1)) : null;
-    const diameterTokens = sugarAcidPresent ? numericLines.slice(0, -2) : numericLines;
-    const diametersMm = diameterTokens.map((token) => {
+    const normalizedBrix = brixOnlyPresent ? Number(numericLines.at(-1)) : brix;
+    const diameterTokens = sugarAcidPresent
+      ? numericLines.slice(0, -2)
+      : brixOnlyPresent
+        ? numericLines.slice(0, -1)
+        : numericLines;
+    const parsedDiameters = diameterTokens.map((token) => {
       const parsed = parseDiameter(token);
       if (parsed.warning) warnings.push(parsed.warning);
       return parsed.value;
     });
+    if (parsedDiameters.length > 10) {
+      warnings.push(`横径が${parsedDiameters.length}個あるため、先頭10個を使用します`);
+    }
+    const diametersMm = parsedDiameters.slice(0, 10);
 
     const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
-    if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
-    if (brix === null) warnings.push("糖度が未入力です");
+    if (diametersMm.length === 0) warnings.push("横径が未入力です");
+    if (!measuredAt) warnings.push("調査日が未入力のため、登録日を使用します");
+    if (normalizedBrix === null) warnings.push("糖度が未入力です");
     if (acidity === null) warnings.push("酸度が未入力です");
 
-    const notes = [currentTreatment, ...currentNotes].filter(Boolean).join("・");
+    const notes = currentNotes.filter(Boolean).join("・");
 
     records.push({
       measuredAt,
       registeredAt,
       orchard: currentOrchard,
       variety,
+      treatment: currentTreatment || null,
       diametersMm,
-      brix,
+      brix: normalizedBrix,
       acidity,
       notes,
       source: "text",
@@ -112,9 +251,21 @@ export function parseSurveyMemo(
     currentNotes = [];
   };
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     if (fullDatePattern.test(line) || shortDatePattern.test(line)) {
-      measuredAt = normalizeDate(line, registeredAt);
+      measuredAt = normalizeDate(line);
+      continue;
+    }
+
+    const inlineRecord = parseInlineSurveyLine(line, measuredAt, registeredAt);
+    if (inlineRecord) {
+      flush();
+      records.push(inlineRecord);
+      currentOrchard = "";
+      currentTreatment = "";
+      currentNotes = [];
+      numericLines = [];
       continue;
     }
 
@@ -135,6 +286,20 @@ export function parseSurveyMemo(
       currentOrchard = normalized;
       currentTreatment = "";
       currentNotes = [];
+      continue;
+    }
+
+    const nextLine = lines[lineIndex + 1];
+    if (
+      nextLine &&
+      numberPattern.test(nextLine) &&
+      (!currentOrchard || hasSugarAcidPair(numericLines))
+    ) {
+      flush();
+      currentOrchard = normalized;
+      currentTreatment = "";
+      currentNotes = [];
+      batchWarnings.push(`園地「${line}」はマスターに登録されていません`);
       continue;
     }
 

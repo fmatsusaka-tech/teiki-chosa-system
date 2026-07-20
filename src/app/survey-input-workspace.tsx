@@ -10,11 +10,17 @@ import {
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import type { SurveyRecord } from "../domain/survey-record";
+import {
+  applyRegistrationDate,
+  hasRequiredSurveyFields,
+} from "../domain/survey-record-registration";
 import { registerSurveyRecords } from "../lib/register-survey-records";
+import { validateOcrImage } from "../services/ocr/ocr-image-input";
 
 function average(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+  const measuredValues = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (measuredValues.length === 0) return null;
+  return measuredValues.reduce((sum, value) => sum + value, 0) / measuredValues.length;
 }
 
 function formatNumber(value: number | null, digits = 1) {
@@ -25,8 +31,9 @@ function visibleWarnings(record: SurveyRecord): string[] {
   return record.warnings.filter((warning) => {
     if (warning === "糖度が未入力です" && record.brix !== null) return false;
     if (warning === "酸度が未入力です" && record.acidity !== null) return false;
-    if (warning.startsWith("横径が") && record.diametersMm.length >= 5) return false;
+    if (warning === "横径が未入力です" && record.diametersMm.length >= 1) return false;
     if (warning === "品種を特定できませんでした" && record.variety !== "未設定") return false;
+    if (warning === "調査日が未入力のため、登録日を使用します" && record.measuredAt) return false;
     return true;
   });
 }
@@ -40,6 +47,7 @@ type RegistrationStatus =
 export function SurveyInputWorkspace() {
   const [sourceText, setSourceText] = useState("");
   const [records, setRecords] = useState<SurveyRecord[]>([]);
+  const [batchWarnings, setBatchWarnings] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [photoNames, setPhotoNames] = useState<string[]>([]);
@@ -68,8 +76,8 @@ export function SurveyInputWorkspace() {
     [records],
   );
 
-  const shortDiameterCount = useMemo(
-    () => records.filter((record) => record.diametersMm.length < 5).length,
+  const missingDiameterCount = useMemo(
+    () => records.filter((record) => record.diametersMm.length === 0).length,
     [records],
   );
 
@@ -77,13 +85,7 @@ export function SurveyInputWorkspace() {
     () =>
       records.filter(
         (record, index) =>
-          selectedRows.has(index) &&
-          (record.brix === null ||
-            record.acidity === null ||
-            record.diametersMm.length === 0 ||
-            record.orchard.trim() === "" ||
-            record.variety.trim() === "" ||
-            record.variety === "未設定"),
+          selectedRows.has(index) && !hasRequiredSurveyFields(record),
       ).length,
     [records, selectedRows],
   );
@@ -92,6 +94,7 @@ export function SurveyInputWorkspace() {
     setRegistrationStatus({ kind: "idle", message: "" });
     if (!text.trim()) {
       setRecords([]);
+      setBatchWarnings([]);
       setSelectedRows(new Set());
       setExpandedRows(new Set());
       hasAnalyzedRef.current = false;
@@ -100,6 +103,7 @@ export function SurveyInputWorkspace() {
 
     const parsed = parseSurveyMemo(text);
     setRecords(parsed.records);
+    setBatchWarnings(parsed.batchWarnings);
     setSelectedRows(new Set(parsed.records.map((_, index) => index)));
     setExpandedRows(
       new Set(
@@ -148,6 +152,44 @@ export function SurveyInputWorkspace() {
     });
   };
 
+  const addBlankRecord = () => {
+    const now = new Date().toISOString();
+    const index = records.length;
+    const record: SurveyRecord = {
+      measuredAt: records[0]?.measuredAt ?? "",
+      registeredAt: now,
+      orchard: "",
+      variety: "",
+      treatment: null,
+      diametersMm: [],
+      brix: null,
+      acidity: null,
+      notes: "",
+      source: "text",
+      confidence: null,
+      warnings: ["手動で追加した候補です。必須項目を確認してください"],
+    };
+
+    setRecords((current) => [...current, record]);
+    setSelectedRows((current) => new Set([...current, index]));
+    setExpandedRows((current) => new Set([...current, index]));
+    setRegistrationStatus({ kind: "idle", message: "" });
+  };
+
+  const removeRecord = (index: number) => {
+    const withoutIndex = (values: Set<number>) =>
+      new Set(
+        [...values]
+          .filter((value) => value !== index)
+          .map((value) => (value > index ? value - 1 : value)),
+      );
+
+    setRecords((current) => current.filter((_, recordIndex) => recordIndex !== index));
+    setSelectedRows((current) => withoutIndex(current));
+    setExpandedRows((current) => withoutIndex(current));
+    setRegistrationStatus({ kind: "idle", message: "" });
+  };
+
   const updateRecord = <K extends keyof SurveyRecord>(
     index: number,
     field: K,
@@ -170,8 +212,12 @@ export function SurveyInputWorkspace() {
     updateRecord(index, field, Number.isFinite(value) ? value : null);
   };
 
+  const updateMeasuredDate = (index: number, rawValue: string) => {
+    updateRecord(index, "measuredAt", rawValue ? `${rawValue}T00:00:00.000Z` : "");
+  };
+
   const updateDiameter = (recordIndex: number, diameterIndex: number, rawValue: string) => {
-    const value = Number(rawValue);
+    const value = rawValue === "" ? 0 : Number(rawValue);
     if (!Number.isFinite(value)) return;
     setRegistrationStatus({ kind: "idle", message: "" });
     setRecords((current) =>
@@ -181,6 +227,31 @@ export function SurveyInputWorkspace() {
         diametersMm[diameterIndex] = value;
         return { ...record, diametersMm };
       }),
+    );
+  };
+
+  const addDiameter = (recordIndex: number) => {
+    setRegistrationStatus({ kind: "idle", message: "" });
+    setRecords((current) =>
+      current.map((record, index) =>
+        index === recordIndex && record.diametersMm.length < 10
+          ? { ...record, diametersMm: [...record.diametersMm, 0] }
+          : record,
+      ),
+    );
+  };
+
+  const removeDiameter = (recordIndex: number, diameterIndex: number) => {
+    setRegistrationStatus({ kind: "idle", message: "" });
+    setRecords((current) =>
+      current.map((record, index) =>
+        index === recordIndex
+          ? {
+              ...record,
+              diametersMm: record.diametersMm.filter((_, indexToKeep) => indexToKeep !== diameterIndex),
+            }
+          : record,
+      ),
     );
   };
 
@@ -198,6 +269,7 @@ export function SurveyInputWorkspace() {
   const clearInput = () => {
     setSourceText("");
     setRecords([]);
+    setBatchWarnings([]);
     setSelectedRows(new Set());
     setExpandedRows(new Set());
     setPhotoNames([]);
@@ -205,17 +277,25 @@ export function SurveyInputWorkspace() {
     hasAnalyzedRef.current = false;
   };
 
-  const handlePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotos = async (
+    event: ChangeEvent<HTMLInputElement>,
+    sourceKind: "photo" | "screenshot",
+  ) => {
     const files = Array.from(event.target.files ?? []);
     setPhotoNames(files.map((file) => file.name));
     event.target.value = "";
     const image = files[0];
     if (!image || ocrStatus.kind === "loading") return;
+    const validation = validateOcrImage(image);
+    if (!validation.valid) {
+      setOcrStatus({ kind: "error", message: validation.message });
+      return;
+    }
     setOcrStatus({ kind: "loading", message: "OCRで画像を読み取っています…" });
     try {
       const form = new FormData();
       form.append("image", image);
-      form.append("sourceKind", image.name.toLowerCase().includes("screenshot") ? "screenshot" : "photo");
+      form.append("sourceKind", sourceKind);
       const response = await fetch("/api/ocr", { method: "POST", body: form });
       const payload = await response.json() as { candidates?: unknown[]; error?: string };
       if (!response.ok || !payload.candidates) throw new Error(payload.error || "OCRに失敗しました。");
@@ -235,8 +315,9 @@ export function SurveyInputWorkspace() {
 
     if (selected.length === 0 || incompleteSelectedCount > 0) return;
 
+    const registrationDate = new Date();
     const recordsWithIds = selected.map(({ record }) => ({
-      ...record,
+      ...applyRegistrationDate(record, registrationDate),
       id: record.id ?? crypto.randomUUID(),
     }));
 
@@ -261,6 +342,7 @@ export function SurveyInputWorkspace() {
       });
       setSourceText("");
       setRecords([]);
+      setBatchWarnings([]);
       setSelectedRows(new Set());
       setExpandedRows(new Set());
       setPhotoNames([]);
@@ -299,7 +381,7 @@ export function SurveyInputWorkspace() {
             その場で撮影
           </button>
           <button type="button" onClick={() => libraryInputRef.current?.click()}>
-            写真を選択
+            スクリーンショットを選択
           </button>
           <button type="button" disabled={!sourceText} onClick={clearInput}>
             入力を消す
@@ -310,16 +392,16 @@ export function SurveyInputWorkspace() {
           ref={cameraInputRef}
           className="visually-hidden"
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp"
           capture="environment"
-          onChange={handlePhotos}
+          onChange={(event) => void handlePhotos(event, "photo")}
         />
         <input
           ref={libraryInputRef}
           className="visually-hidden"
           type="file"
-          accept="image/*"
-          onChange={handlePhotos}
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(event) => void handlePhotos(event, "screenshot")}
         />
 
         {photoNames.length > 0 && (
@@ -341,7 +423,7 @@ export function SurveyInputWorkspace() {
         )}
       </section>
 
-      {records.length > 0 && (
+      {(records.length > 0 || batchWarnings.length > 0) && (
         <section
           ref={resultsRef}
           className="panel results-panel"
@@ -355,14 +437,26 @@ export function SurveyInputWorkspace() {
             <div className="summary-badges">
               <span className="status">全{records.length}件</span>
               {warningCount > 0 && <span className="warning-badge">要確認 {warningCount}件</span>}
+              <button type="button" onClick={addBlankRecord}>空の候補を追加</button>
             </div>
           </div>
 
-          {(missingBrixCount > 0 || missingAcidityCount > 0 || shortDiameterCount > 0) && (
+          {(missingBrixCount > 0 || missingAcidityCount > 0 || missingDiameterCount > 0) && (
             <div className="issue-summary" role="alert">
               {missingBrixCount > 0 && <span>糖度未入力：{missingBrixCount}件</span>}
               {missingAcidityCount > 0 && <span>酸度未入力：{missingAcidityCount}件</span>}
-              {shortDiameterCount > 0 && <span>横径不足：{shortDiameterCount}件</span>}
+              {missingDiameterCount > 0 && <span>横径未入力：{missingDiameterCount}件</span>}
+            </div>
+          )}
+
+          {batchWarnings.length > 0 && (
+            <div className="issue-summary" role="alert">
+              <strong>解析できなかった入力があります</strong>
+              <ul>
+                {batchWarnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -401,7 +495,11 @@ export function SurveyInputWorkspace() {
                       onClick={() => toggleExpanded(index)}
                     >
                       <span className="orchard-name">{record.orchard || "園地未入力"}</span>
-                      <span className="record-meta">{record.variety}{record.notes ? `・${record.notes}` : ""}</span>
+                      <span className="record-meta">
+                        {record.variety}
+                        {record.treatment ? `・${record.treatment}` : ""}
+                        {record.notes ? `・${record.notes}` : ""}
+                      </span>
                       <span className="metric"><small>平均</small>{formatNumber(mean)}</span>
                       <span className={`metric ${record.brix === null ? "missing-metric" : ""}`}><small>糖</small>{formatNumber(record.brix)}</span>
                       <span className={`metric ${record.acidity === null ? "missing-metric" : ""}`}><small>酸</small>{formatNumber(record.acidity)}</span>
@@ -413,6 +511,10 @@ export function SurveyInputWorkspace() {
                     <div className="record-detail">
                       <div className="record-fields">
                         <label>
+                          <span>調査日（未入力時は登録日）</span>
+                          <input data-entry-field="true" type="date" value={record.measuredAt.slice(0, 10)} onKeyDown={focusNextField} onChange={(event) => updateMeasuredDate(index, event.target.value)} />
+                        </label>
+                        <label>
                           <span>園地</span>
                           <input data-entry-field="true" value={record.orchard} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "orchard", event.target.value)} />
                         </label>
@@ -421,26 +523,40 @@ export function SurveyInputWorkspace() {
                           <input data-entry-field="true" value={record.variety} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "variety", event.target.value)} />
                         </label>
                         <label>
-                          <span>処理区・備考</span>
+                          <span>処理区</span>
+                          <input data-entry-field="true" value={record.treatment ?? ""} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "treatment", event.target.value || null)} />
+                        </label>
+                        <label>
+                          <span>備考</span>
                           <input data-entry-field="true" value={record.notes} onKeyDown={focusNextField} onChange={(event) => updateRecord(index, "notes", event.target.value)} />
                         </label>
                         <label className={record.brix === null ? "required-field" : ""}>
                           <span>糖度{record.brix === null ? "（必須）" : ""}</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.1" value={record.brix ?? ""} placeholder="例：12.5" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "brix", event.target.value)} />
                         </label>
-                        <label className={record.acidity === null ? "required-field" : ""}>
-                          <span>酸度{record.acidity === null ? "（必須）" : ""}</span>
+                        <label>
+                          <span>酸度（任意）</span>
                           <input data-entry-field="true" type="number" inputMode="decimal" min="0" step="0.01" value={record.acidity ?? ""} placeholder="例：0.85" onKeyDown={focusNextField} onChange={(event) => updateMeasurement(index, "acidity", event.target.value)} />
                         </label>
                       </div>
 
                       <div className="diameter-grid">
                         {record.diametersMm.map((diameter, diameterIndex) => (
-                          <label key={diameterIndex}>
-                            <span>玉{diameterIndex + 1}</span>
-                            <input data-entry-field="true" type="number" inputMode="decimal" step="0.1" value={diameter} onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
-                          </label>
+                          <div className="diameter-field" key={diameterIndex}>
+                            <label>
+                              <span>玉{diameterIndex + 1}</span>
+                              <input data-entry-field="true" type="number" inputMode="decimal" min="0.1" step="0.1" value={diameter > 0 ? diameter : ""} placeholder="横径" onKeyDown={focusNextField} onChange={(event) => updateDiameter(index, diameterIndex, event.target.value)} aria-label={`玉${diameterIndex + 1}の横径`} />
+                            </label>
+                            <button type="button" aria-label={`玉${diameterIndex + 1}の横径を削除`} onClick={() => removeDiameter(index, diameterIndex)}>削除</button>
+                          </div>
                         ))}
+                      </div>
+
+                      <div className="diameter-actions">
+                        <button type="button" disabled={record.diametersMm.length >= 10} onClick={() => addDiameter(index)}>
+                          {record.diametersMm.length >= 10 ? "横径は最大10個です" : "横径欄を追加"}
+                        </button>
+                        <span>{record.diametersMm.filter((value) => value > 0).length}/10個入力</span>
                       </div>
 
                       {warnings.length > 0 && (
@@ -448,6 +564,12 @@ export function SurveyInputWorkspace() {
                           {warnings.map((warning) => <li key={warning}>{warning}</li>)}
                         </ul>
                       )}
+
+                      <div className="record-actions">
+                        <button type="button" onClick={() => removeRecord(index)}>
+                          この候補を削除
+                        </button>
+                      </div>
                     </div>
                   )}
                 </article>
