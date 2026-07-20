@@ -40,6 +40,7 @@ type RegistrationStatus =
 export function SurveyInputWorkspace() {
   const [sourceText, setSourceText] = useState("");
   const [records, setRecords] = useState<SurveyRecord[]>([]);
+  const [batchWarnings, setBatchWarnings] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [photoNames, setPhotoNames] = useState<string[]>([]);
@@ -92,6 +93,7 @@ export function SurveyInputWorkspace() {
     setRegistrationStatus({ kind: "idle", message: "" });
     if (!text.trim()) {
       setRecords([]);
+      setBatchWarnings([]);
       setSelectedRows(new Set());
       setExpandedRows(new Set());
       hasAnalyzedRef.current = false;
@@ -100,6 +102,7 @@ export function SurveyInputWorkspace() {
 
     const parsed = parseSurveyMemo(text);
     setRecords(parsed.records);
+    setBatchWarnings(parsed.batchWarnings);
     setSelectedRows(new Set(parsed.records.map((_, index) => index)));
     setExpandedRows(
       new Set(
@@ -198,6 +201,7 @@ export function SurveyInputWorkspace() {
   const clearInput = () => {
     setSourceText("");
     setRecords([]);
+    setBatchWarnings([]);
     setSelectedRows(new Set());
     setExpandedRows(new Set());
     setPhotoNames([]);
@@ -261,6 +265,7 @@ export function SurveyInputWorkspace() {
       });
       setSourceText("");
       setRecords([]);
+      setBatchWarnings([]);
       setSelectedRows(new Set());
       setExpandedRows(new Set());
       setPhotoNames([]);
@@ -341,7 +346,7 @@ export function SurveyInputWorkspace() {
         )}
       </section>
 
-      {records.length > 0 && (
+      {(records.length > 0 || batchWarnings.length > 0) && (
         <section
           ref={resultsRef}
           className="panel results-panel"
@@ -363,6 +368,17 @@ export function SurveyInputWorkspace() {
               {missingBrixCount > 0 && <span>糖度未入力：{missingBrixCount}件</span>}
               {missingAcidityCount > 0 && <span>酸度未入力：{missingAcidityCount}件</span>}
               {shortDiameterCount > 0 && <span>横径不足：{shortDiameterCount}件</span>}
+            </div>
+          )}
+
+          {batchWarnings.length > 0 && (
+            <div className="issue-summary" role="alert">
+              <strong>解析できなかった入力があります</strong>
+              <ul>
+                {batchWarnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
             </div>
           )}
 

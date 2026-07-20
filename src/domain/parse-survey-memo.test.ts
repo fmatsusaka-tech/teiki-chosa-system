@@ -240,6 +240,15 @@ describe("parseSurveyMemo", () => {
     ]));
   });
 
+  it("解析できない行を全体警告として保持する", () => {
+    const result = parseSurveyMemo("判読できない文字列");
+
+    expect(result.records).toHaveLength(0);
+    expect(result.batchWarnings).toEqual([
+      "「判読できない文字列」を園地名として認識できませんでした",
+    ]);
+  });
+
   it("複数園地と処理区を9レコードに分割する", () => {
     const result = parseSurveyMemo(memo, "2026-07-18T07:00:00.000Z");
 
