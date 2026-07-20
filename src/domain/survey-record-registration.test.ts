@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { SurveyRecord } from "./survey-record";
-import { hasRequiredSurveyFields } from "./survey-record-registration";
+import {
+  applyRegistrationDate,
+  hasRequiredSurveyFields,
+} from "./survey-record-registration";
 
 const completeRecord: SurveyRecord = {
   measuredAt: "2026-07-21T00:00:00.000Z",
@@ -23,7 +26,6 @@ describe("hasRequiredSurveyFields", () => {
   });
 
   it.each([
-    ["調査日", { measuredAt: "" }],
     ["園地", { orchard: "" }],
     ["品種", { variety: "" }],
     ["未確定品種", { variety: "未設定" }],
@@ -31,5 +33,31 @@ describe("hasRequiredSurveyFields", () => {
     ["糖度", { brix: null }],
   ])("%sがない場合は登録できない", (_label, overrides) => {
     expect(hasRequiredSurveyFields({ ...completeRecord, ...overrides })).toBe(false);
+  });
+
+  it("調査日が空欄でも登録前の必須判定を通過する", () => {
+    expect(hasRequiredSurveyFields({ ...completeRecord, measuredAt: "" })).toBe(true);
+  });
+
+  it("横径が1個あれば登録できる", () => {
+    expect(hasRequiredSurveyFields({ ...completeRecord, diametersMm: [39.8] })).toBe(true);
+  });
+});
+
+describe("applyRegistrationDate", () => {
+  it("空欄の調査日へ登録操作日を設定する", () => {
+    const result = applyRegistrationDate(
+      { ...completeRecord, measuredAt: "" },
+      new Date(2026, 6, 21, 15, 30),
+    );
+
+    expect(result.measuredAt).toBe("2026-07-21T00:00:00.000Z");
+  });
+
+  it("入力済みの調査日は変更しない", () => {
+    const result = applyRegistrationDate(completeRecord, new Date(2027, 0, 1));
+
+    expect(result).toBe(completeRecord);
+    expect(result.measuredAt).toBe("2026-07-21T00:00:00.000Z");
   });
 });

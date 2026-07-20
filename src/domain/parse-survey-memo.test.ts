@@ -212,7 +212,7 @@ describe("parseSurveyMemo", () => {
       acidity: 1.2,
     });
     expect(result.batchWarnings).toEqual([]);
-    expect(result.records[0].warnings).toContain("調査年が不明です。調査日を確認してください");
+    expect(result.records[0].warnings).toContain("調査日が未入力のため、登録日を使用します");
   });
 
   it("糖度のみの行と未知の園地を含む実メモを候補として分割する", () => {

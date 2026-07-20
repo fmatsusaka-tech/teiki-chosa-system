@@ -158,7 +158,7 @@ function parseInlineSurveyLine(
     warnings.push(`品種「${variety}」はマスターに登録されていません`);
   }
   if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
-  if (!measuredAt) warnings.push("調査年が不明です。調査日を確認してください");
+  if (!measuredAt) warnings.push("調査日が未入力のため、登録日を使用します");
   if (brix === null) warnings.push("糖度が未入力です");
   if (acidity === null) warnings.push("酸度が未入力です");
 
@@ -218,7 +218,7 @@ export function parseSurveyMemo(
     const variety = orchardVarietyDefaults[currentOrchard] ?? "未設定";
     if (variety === "未設定") warnings.push("品種を特定できませんでした");
     if (diametersMm.length < 5) warnings.push(`横径が${diametersMm.length}個です`);
-    if (!measuredAt) warnings.push("調査年が不明です。調査日を確認してください");
+    if (!measuredAt) warnings.push("調査日が未入力のため、登録日を使用します");
     if (normalizedBrix === null) warnings.push("糖度が未入力です");
     if (acidity === null) warnings.push("酸度が未入力です");
 

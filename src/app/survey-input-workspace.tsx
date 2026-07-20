@@ -10,7 +10,10 @@ import {
 } from "react";
 import { parseSurveyMemo } from "../domain/parse-survey-memo";
 import type { SurveyRecord } from "../domain/survey-record";
-import { hasRequiredSurveyFields } from "../domain/survey-record-registration";
+import {
+  applyRegistrationDate,
+  hasRequiredSurveyFields,
+} from "../domain/survey-record-registration";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 
 function average(values: number[]): number | null {
@@ -28,7 +31,7 @@ function visibleWarnings(record: SurveyRecord): string[] {
     if (warning === "酸度が未入力です" && record.acidity !== null) return false;
     if (warning.startsWith("横径が") && record.diametersMm.length >= 5) return false;
     if (warning === "品種を特定できませんでした" && record.variety !== "未設定") return false;
-    if (warning === "調査年が不明です。調査日を確認してください" && record.measuredAt) return false;
+    if (warning === "調査日が未入力のため、登録日を使用します" && record.measuredAt) return false;
     return true;
   });
 }
@@ -277,8 +280,9 @@ export function SurveyInputWorkspace() {
 
     if (selected.length === 0 || incompleteSelectedCount > 0) return;
 
+    const registrationDate = new Date();
     const recordsWithIds = selected.map(({ record }) => ({
-      ...record,
+      ...applyRegistrationDate(record, registrationDate),
       id: record.id ?? crypto.randomUUID(),
     }));
 
@@ -471,8 +475,8 @@ export function SurveyInputWorkspace() {
                   {isExpanded && (
                     <div className="record-detail">
                       <div className="record-fields">
-                        <label className={!record.measuredAt ? "required-field" : ""}>
-                          <span>調査日（必須）</span>
+                        <label>
+                          <span>調査日（未入力時は登録日）</span>
                           <input data-entry-field="true" type="date" value={record.measuredAt.slice(0, 10)} onKeyDown={focusNextField} onChange={(event) => updateMeasuredDate(index, event.target.value)} />
                         </label>
                         <label>
