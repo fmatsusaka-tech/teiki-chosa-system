@@ -64,7 +64,6 @@ export function SurveyInputWorkspace() {
   });
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
-  const handwrittenInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
   const hasAnalyzedRef = useRef(false);
 
@@ -398,9 +397,6 @@ export function SurveyInputWorkspace() {
           <button type="button" onClick={() => libraryInputRef.current?.click()}>
             スクリーンショットを選択
           </button>
-          <button type="button" onClick={() => handwrittenInputRef.current?.click()}>
-            手書きメモを選択
-          </button>
           <button type="button" disabled={!sourceText} onClick={clearInput}>
             入力を消す
           </button>
@@ -421,14 +417,6 @@ export function SurveyInputWorkspace() {
           accept="image/png,image/jpeg,image/webp"
           onChange={(event) => void handlePhotos(event, "screenshot")}
         />
-        <input
-          ref={handwrittenInputRef}
-          className="visually-hidden"
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          onChange={(event) => void handlePhotos(event, "handwritten")}
-        />
-
         {photoNames.length > 0 && (
           <div className="temporary-photo-note" role="status">
             <strong>{photoNames[0]}</strong>
