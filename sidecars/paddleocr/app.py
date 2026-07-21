@@ -20,18 +20,25 @@ class OcrRequest(BaseModel):
     sourceKind: str | None = None
 
 
-def prepare_image(image_path: Path, source_kind: str | None) -> Any:
-    if source_kind != "handwritten":
-        return str(image_path)
-
+def enhance_image(image_path: Path) -> Any:
     import cv2
 
     image = cv2.imread(str(image_path))
     if image is None:
-        raise ValueError("handwritten image could not be decoded")
+        raise ValueError("image could not be decoded")
     grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     # 局所コントラストを整え、薄い鉛筆や罫線入り用紙でも文字を残しやすくする。
     return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(grayscale)
+
+
+def prepare_image(image_path: Path, source_kind: str | None) -> Any:
+    if source_kind != "handwritten":
+        return str(image_path)
+    return enhance_image(image_path)
+
+
+def has_recognized_lines(result: Any) -> bool:
+    return any(page for page in (result or []))
 
 
 def get_ocr() -> Any:
@@ -68,7 +75,12 @@ def recognize(request: OcrRequest) -> dict[str, Any]:
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as image_file:
             image_file.write(image)
             image_path = Path(image_file.name)
-        result = get_ocr().ocr(prepare_image(image_path, request.sourceKind), cls=True)
+        ocr = get_ocr()
+        result = ocr.ocr(prepare_image(image_path, request.sourceKind), cls=True)
+        # Smartphone memo screenshots often use low-contrast gray text. Keep the
+        # normal path fast, but retry once with contrast enhancement when it found nothing.
+        if request.sourceKind == "screenshot" and not has_recognized_lines(result):
+            result = ocr.ocr(enhance_image(image_path), cls=True)
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"PaddleOCR failed: {error}") from error
     finally:

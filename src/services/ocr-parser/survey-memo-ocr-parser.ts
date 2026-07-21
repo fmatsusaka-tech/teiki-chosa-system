@@ -1,4 +1,5 @@
 import { parseSurveyMemo } from "../../domain/parse-survey-memo";
+import { orchardMasters, varietyMasters } from "../../domain/survey-masters";
 import {
   ocrParseResultSchema,
   type OcrParseInput,
@@ -12,6 +13,37 @@ function warning(message: string): ParserWarning {
   return { code: "UNPARSED_TEXT", message };
 }
 
+const orchardNames = new Set(
+  orchardMasters.flatMap((item) => [item.canonicalName, ...item.aliases]).map((name) => name.normalize("NFKC")),
+);
+const varietyNames = new Set(
+  varietyMasters.flatMap((item) => [item.canonicalName, ...item.aliases]).map((name) => name.normalize("NFKC")),
+);
+
+function normalizeDateLine(line: string): string | null {
+  const normalized = line.normalize("NFKC").trim();
+  const standard = normalized.match(/^(\d{1,2})[/.\-](\d{1,2})$/);
+  if (standard) return `${Number(standard[1])}/${Number(standard[2])}`;
+
+  // OCR can drop the slash in M/DD and recognize it as the digit 1 (e.g. 7/21 -> 7121).
+  const slashAsOne = normalized.match(/^([1-9]|1[0-2])1([0-3]\d)$/);
+  return slashAsOne ? `${Number(slashAsOne[1])}/${Number(slashAsOne[2])}` : null;
+}
+
+function surveySection(rawText: string, referenceDate: Date): string {
+  const lines = rawText.split(/\r?\n/).map((line) => line.normalize("NFKC").trim()).filter(Boolean);
+  const orchardIndex = lines.findIndex((line) => orchardNames.has(line));
+
+  // Unknown/new orchards are intentionally left to the existing parser and user correction flow.
+  if (orchardIndex < 0) return rawText;
+
+  const date = lines.slice(0, orchardIndex).reverse().map(normalizeDateLine).find(Boolean);
+  const surveyLines = lines.slice(orchardIndex).filter((line) => !/^[\-–—]+$/.test(line));
+  if (surveyLines[1] && varietyNames.has(surveyLines[1])) surveyLines.splice(1, 1);
+  const datedLine = date ? `${referenceDate.getUTCFullYear()}/${date}` : null;
+  return [...(datedLine ? [datedLine] : []), ...surveyLines].join("\n");
+}
+
 export class SurveyMemoOcrParser implements OcrParser {
   constructor(private readonly fallback: OcrParser = new RuleBasedOcrParser()) {}
 
@@ -20,7 +52,7 @@ export class SurveyMemoOcrParser implements OcrParser {
     if (!sourceText) return this.fallback.parse(input);
 
     const referenceDate = input.referenceDate ?? new Date();
-    const batch = parseSurveyMemo(sourceText, referenceDate.toISOString());
+    const batch = parseSurveyMemo(surveySection(sourceText, referenceDate), referenceDate.toISOString());
     if (batch.records.length === 0) return this.fallback.parse(input);
 
     const confidenceWarning = input.ocrResult.confidence !== null && input.ocrResult.confidence < 0.7

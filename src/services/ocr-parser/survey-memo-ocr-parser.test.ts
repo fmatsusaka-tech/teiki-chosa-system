@@ -83,4 +83,48 @@ describe("SurveyMemoOcrParser", () => {
       message: expect.stringContaining("原画像"),
     }));
   });
+
+  it("スマホ画面UIを既知園地より前で除外し、欠けた日付区切りを補正する", async () => {
+    const parsed = await new SurveyMemoOcrParser().parse({
+      ocrResult: ocrResult(`17:46
+.:!!
+つ
+16
+-
+20261
+年7月21日
+17:46
+7121
+徳田
+早生
+401
+402
+403
+10.5
+1.0
+接続テスト
+-`, 0.9, "handwritten"),
+      referenceDate: new Date("2026-07-21T00:00:00.000Z"),
+    });
+
+    expect(parsed.candidates).toHaveLength(1);
+    expect(parsed.candidates[0]).toMatchObject({
+      measuredDate: "2026-07-21",
+      orchard: "徳田",
+      variety: "早生",
+      diametersMm: [40.1, 40.2, 40.3],
+      brix: 10.5,
+      acidity: 1,
+      notes: "接続テスト",
+    });
+  });
+
+  it("未知の新園地を含む文字列は既存の補正フローへ残す", async () => {
+    const parsed = await new SurveyMemoOcrParser().parse({
+      ocrResult: ocrResult("7/21\n新園地\n早生\n401\n10.5"),
+      referenceDate: new Date("2026-07-21T00:00:00.000Z"),
+    });
+
+    expect(parsed.candidates[0].sourceText).toContain("新園地");
+  });
 });

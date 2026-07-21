@@ -46,12 +46,17 @@ function missingRequiredWarnings(values: {
   orchard: string | null;
   variety: string | null;
 }): ParserWarning[] {
+  const labels: Record<keyof typeof values, string> = {
+    measuredDate: "調査日",
+    orchard: "園地",
+    variety: "品種",
+  };
   return (Object.entries(values) as [keyof typeof values, string | null][])
     .filter(([, value]) => value === null)
     .map(([field]) => ({
       code: "MISSING_REQUIRED_FIELD" as const,
       field,
-      message: `${field} could not be parsed from the OCR result.`,
+      message: `${labels[field]}をOCR結果から特定できませんでした。`,
     }));
 }
 
@@ -84,10 +89,10 @@ export class RuleBasedOcrParser implements OcrParser {
     const variety = get("品種");
     const warnings = missingRequiredWarnings({ measuredDate, orchard, variety });
     if (input.ocrResult.confidence !== null && input.ocrResult.confidence < 0.7) {
-      warnings.push({ code: "LOW_CONFIDENCE", message: "OCR confidence is below 0.7." });
+      warnings.push({ code: "LOW_CONFIDENCE", message: "OCRの認識信頼度が低いため、内容を確認してください。" });
     }
     if (unparsedText.length > 0) {
-      warnings.push({ code: "UNPARSED_TEXT", message: "Some OCR text was not classified." });
+      warnings.push({ code: "UNPARSED_TEXT", message: "項目を特定できなかったOCR文字があります。" });
     }
     const diameterText = get("横径");
     const diametersMm = diameterText
