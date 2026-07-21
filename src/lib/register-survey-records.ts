@@ -1,4 +1,5 @@
 import type { SurveyRecord } from "../domain/survey-record";
+import { buildCorrectionEvents, correctionSnapshotFromRecord } from "../domain/correction-history";
 
 export type RegistrationResult = {
   ok: boolean;
@@ -18,7 +19,15 @@ export async function registerSurveyRecords(
   records: SurveyRecord[],
   sourceText: string,
   operator = "",
+  originalRecords: readonly (SurveyRecord | null)[] = [],
+  correctedRecords: readonly SurveyRecord[] = records,
 ): Promise<RegistrationResult> {
+  const corrections = buildCorrectionEvents({
+    before: originalRecords.map((record) => record ? correctionSnapshotFromRecord(record) : null),
+    after: correctedRecords.map(correctionSnapshotFromRecord),
+    sourceKind: "text",
+    recordedAt: new Date().toISOString(),
+  });
   const payload = {
     records: records.map((record) => ({
       id: record.id,
@@ -35,6 +44,7 @@ export async function registerSurveyRecords(
     operator,
     origin: window.location.href,
     sourceText,
+    corrections,
   };
 
   const response = await fetch(endpoint, {

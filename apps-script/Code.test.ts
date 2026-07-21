@@ -10,19 +10,20 @@ type AppsScriptHelpers = {
     surveyHeaders: string[],
   ) => unknown[];
   surveyDateParts_: (value: unknown) => { year: number; month: number; day: number } | null;
+  correctionRows_: (events: Record<string, unknown>[]) => unknown[][];
 };
 
 function loadHelpers(): AppsScriptHelpers {
   const source = readFileSync(new URL("./Code.gs", import.meta.url), "utf8");
   const context: Record<string, unknown> = {};
   vm.runInNewContext(
-    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_ };`,
+    `${source}\nthis.helpers = { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, correctionRows_ };`,
     context,
   );
   return context.helpers as AppsScriptHelpers;
 }
 
-const { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_ } = loadHelpers();
+const { ensureDiameterOutputHeaders_, buildSurveyDataRow_, surveyDateParts_, correctionRows_ } = loadHelpers();
 
 describe("調査データの横径変換", () => {
   it("備考の後に玉1〜玉10を置き、既存列の順序を維持する", () => {
@@ -106,5 +107,17 @@ describe("調査データの横径変換", () => {
     expect(validRow).toEqual([8, "前半", "", "有効"]);
     expect(invalidRow).toEqual(["", "", "", "要確認"]);
     expect(surveyDateParts_("不明")).toBeNull();
+  });
+});
+
+describe("補正履歴", () => {
+  it("辞書候補と監査のみを区別した行へ変換する", () => {
+    const rows = correctionRows_([{
+      id: "id", recordedAt: "2026-07-22T00:00:00.000Z", sourceKind: "text", candidateIndex: 0,
+      field: "orchard", beforeValue: "国着", afterValue: "国道", dictionaryEligible: true,
+    }]);
+
+    expect(rows[0].slice(0, 1)).toEqual(["id"]);
+    expect(rows[0].slice(2)).toEqual(["text", 1, "orchard", "国着", "国道", "対象"]);
   });
 });
