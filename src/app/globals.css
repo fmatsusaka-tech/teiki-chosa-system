@@ -137,6 +137,9 @@ button:disabled { cursor: not-allowed; background: #dfe5df; color: #7d887f; }
 .review-introduction { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .review-introduction p { margin: 0; line-height: 1.6; }
 .review-introduction span { padding: 6px 10px; border-radius: 999px; background: #eef2ee; white-space: nowrap; }
+.review-source-image { display: grid; gap: 10px; margin: 0; padding: 16px; border: 1px solid #dce3dc; border-radius: 14px; background: #fff; }
+.review-source-image figcaption { font-size: .86rem; font-weight: 700; }
+.review-source-image img { display: block; width: 100%; max-height: 55vh; border-radius: 10px; background: #f5f7f2; object-fit: contain; }
 .review-candidate { min-width: 0; margin: 0; padding: 18px; border: 1px solid #dce3dc; border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(29, 51, 34, 0.08); }
 .review-candidate legend { padding: 0 8px; font-weight: 800; }
 .review-warnings { margin: 0 0 14px; padding: 12px 12px 12px 32px; border-radius: 10px; background: #fff2cf; color: #694800; }

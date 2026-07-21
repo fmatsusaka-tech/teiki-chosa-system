@@ -16,6 +16,12 @@ import {
 } from "../domain/survey-record-registration";
 import { registerSurveyRecords } from "../lib/register-survey-records";
 import { validateOcrImage } from "../services/ocr/ocr-image-input";
+import {
+  clearReviewImagePreview,
+  createReviewImagePreview,
+  REVIEW_IMAGE_NAME_KEY,
+  REVIEW_IMAGE_PREVIEW_KEY,
+} from "./review-image-preview";
 
 function average(values: number[]): number | null {
   const measuredValues = values.filter((value) => Number.isFinite(value) && value > 0);
@@ -302,6 +308,14 @@ export function SurveyInputWorkspace() {
       if (!response.ok || !payload.candidates) throw new Error(payload.error || "OCRに失敗しました。");
       sessionStorage.setItem("ocr-review-candidates", JSON.stringify(payload.candidates));
       sessionStorage.setItem("ocr-review-source-kind", form.get("sourceKind") as string);
+      try {
+        const preview = await createReviewImagePreview(image);
+        sessionStorage.setItem(REVIEW_IMAGE_PREVIEW_KEY, preview);
+        sessionStorage.setItem(REVIEW_IMAGE_NAME_KEY, image.name);
+      } catch {
+        // Preview is optional. OCR candidates remain available for manual correction.
+        clearReviewImagePreview();
+      }
       window.location.assign("/ocr-review/");
     } catch (error) {
       setOcrStatus({ kind: "error", message: error instanceof Error ? error.message : "OCRに失敗しました。" });
