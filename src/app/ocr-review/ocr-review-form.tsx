@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { surveyParseCandidateSchema, type SurveyParseCandidate } from "../../services/ocr-parser";
+import { clearReviewImagePreview, REVIEW_IMAGE_NAME_KEY, REVIEW_IMAGE_PREVIEW_KEY } from "../review-image-preview";
 import { parseOptionalDiameters, parseOptionalNumber, validateReviewCandidate } from "./review-form";
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
 export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }: Props) {
   const [candidates, setCandidates] = useState(initialCandidates);
   const [warningsConfirmed, setWarningsConfirmed] = useState(false);
+  const [sourceImage, setSourceImage] = useState<{ src: string; name: string } | null>(null);
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
   const errors = useMemo(() => candidates.map(validateReviewCandidate), [candidates]);
   const hasErrors = errors.some((fields) => Object.keys(fields).length > 0);
@@ -24,6 +26,8 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
     if (!stored) return;
     const parsed = surveyParseCandidateSchema.array().safeParse(JSON.parse(stored));
     if (parsed.success) setCandidates(parsed.data);
+    const preview = sessionStorage.getItem(REVIEW_IMAGE_PREVIEW_KEY);
+    if (preview) setSourceImage({ src: preview, name: sessionStorage.getItem(REVIEW_IMAGE_NAME_KEY) || "選択した画像" });
   }, []);
 
   const update = <K extends keyof SurveyParseCandidate>(index: number, field: K, value: SurveyParseCandidate[K]) => {
@@ -48,6 +52,8 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
       if (!response.ok) throw new Error(payload.error || "保存に失敗しました。");
       sessionStorage.removeItem("ocr-review-candidates");
       sessionStorage.removeItem("ocr-review-source-kind");
+      clearReviewImagePreview();
+      setSourceImage(null);
       setStatus({ kind: "success", message: `${payload.savedCount ?? candidates.length}件を調査原票へ保存しました。` });
     } catch (error) {
       setStatus({ kind: "error", message: error instanceof Error ? error.message : "保存に失敗しました。" });
@@ -60,6 +66,13 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
         <p>OCRの認識結果は候補です。内容を修正し、警告を確認してから確定してください。</p>
         <span>{candidates.length}件</span>
       </div>
+      {sourceImage && (
+        <figure className="review-source-image">
+          <figcaption>元画像：{sourceImage.name}</figcaption>
+          {/* eslint-disable-next-line @next/next/no-img-element -- session-only data URL cannot use the Next image loader. */}
+          <img src={sourceImage.src} alt="OCRで読み取った元画像" />
+        </figure>
+      )}
       {candidates.map((candidate, index) => {
         const existingDiameterValues = candidate.diametersMm?.slice(0, 10).map(String) ?? [];
         const diameterValues = existingDiameterValues.length < 10
