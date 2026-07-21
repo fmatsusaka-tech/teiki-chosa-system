@@ -53,6 +53,7 @@ type RegistrationStatus =
 export function SurveyInputWorkspace() {
   const [sourceText, setSourceText] = useState("");
   const [records, setRecords] = useState<SurveyRecord[]>([]);
+  const [originalRecords, setOriginalRecords] = useState<(SurveyRecord | null)[]>([]);
   const [batchWarnings, setBatchWarnings] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -100,6 +101,7 @@ export function SurveyInputWorkspace() {
     setRegistrationStatus({ kind: "idle", message: "" });
     if (!text.trim()) {
       setRecords([]);
+      setOriginalRecords([]);
       setBatchWarnings([]);
       setSelectedRows(new Set());
       setExpandedRows(new Set());
@@ -109,6 +111,7 @@ export function SurveyInputWorkspace() {
 
     const parsed = parseSurveyMemo(text);
     setRecords(parsed.records);
+    setOriginalRecords(parsed.records.map((record) => structuredClone(record)));
     setBatchWarnings(parsed.batchWarnings);
     setSelectedRows(new Set(parsed.records.map((_, index) => index)));
     setExpandedRows(
@@ -177,6 +180,7 @@ export function SurveyInputWorkspace() {
     };
 
     setRecords((current) => [...current, record]);
+    setOriginalRecords((current) => [...current, null]);
     setSelectedRows((current) => new Set([...current, index]));
     setExpandedRows((current) => new Set([...current, index]));
     setRegistrationStatus({ kind: "idle", message: "" });
@@ -191,6 +195,7 @@ export function SurveyInputWorkspace() {
       );
 
     setRecords((current) => current.filter((_, recordIndex) => recordIndex !== index));
+    setOriginalRecords((current) => current.filter((_, recordIndex) => recordIndex !== index));
     setSelectedRows((current) => withoutIndex(current));
     setExpandedRows((current) => withoutIndex(current));
     setRegistrationStatus({ kind: "idle", message: "" });
@@ -275,6 +280,7 @@ export function SurveyInputWorkspace() {
   const clearInput = () => {
     setSourceText("");
     setRecords([]);
+    setOriginalRecords([]);
     setBatchWarnings([]);
     setSelectedRows(new Set());
     setExpandedRows(new Set());
@@ -345,7 +351,13 @@ export function SurveyInputWorkspace() {
     setRegistrationStatus({ kind: "loading", message: "スプレッドシートへ登録中です…" });
 
     try {
-      const result = await registerSurveyRecords(recordsWithIds, sourceText);
+      const result = await registerSurveyRecords(
+        recordsWithIds,
+        sourceText,
+        "",
+        selected.map(({ index }) => originalRecords[index] ?? null),
+        selected.map(({ record }) => record),
+      );
       const registeredCount = result.registeredCount ?? recordsWithIds.length;
       const skippedCount = result.skippedCount ?? 0;
       setRegistrationStatus({
@@ -356,6 +368,7 @@ export function SurveyInputWorkspace() {
       });
       setSourceText("");
       setRecords([]);
+      setOriginalRecords([]);
       setBatchWarnings([]);
       setSelectedRows(new Set());
       setExpandedRows(new Set());

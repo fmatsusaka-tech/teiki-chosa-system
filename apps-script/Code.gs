@@ -1,6 +1,10 @@
 const SPREADSHEET_ID = "1Ix7qFigeUvmxkEl3C51rmzuBzYDq7OR_ZGHq6GUKa0g";
 const RAW_SHEET_NAME = "調査原票";
 const SURVEY_SHEET_NAME = "調査データ";
+const CORRECTION_HISTORY_SHEET_NAME = "補正履歴";
+const CORRECTION_HISTORY_HEADERS = [
+  "補正ID", "記録日時", "入力方法", "候補番号", "項目", "補正前", "補正後", "辞書候補",
+];
 const API_TOKEN_PROPERTY = "API_TOKEN";
 const MAX_DIAMETERS = 10;
 const DIAMETER_OUTPUT_HEADERS = Array.from(
@@ -83,6 +87,12 @@ function doPost(e) {
       });
     }
 
+    try {
+      appendCorrectionHistory_(payload.corrections || []);
+    } catch (correctionError) {
+      console.error("補正履歴の保存に失敗しました。調査原票は保存済みです。", correctionError);
+    }
+
     return jsonResponse_({
       ok: true,
       registeredCount: rows.length,
@@ -99,6 +109,48 @@ function doPost(e) {
   } finally {
     try { lock.releaseLock(); } catch (_) {}
   }
+}
+
+function setupCorrectionLearning() {
+  return ensureCorrectionHistorySheet_().getName();
+}
+
+function ensureCorrectionHistorySheet_() {
+  const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = spreadsheet.getSheetByName(CORRECTION_HISTORY_SHEET_NAME)
+    || spreadsheet.insertSheet(CORRECTION_HISTORY_SHEET_NAME);
+  const headers = sheet.getLastColumn() > 0
+    ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), CORRECTION_HISTORY_HEADERS.length)).getValues()[0]
+    : [];
+  if (sheet.getLastRow() === 0 || headers.every((value) => value === "")) {
+    sheet.getRange(1, 1, 1, CORRECTION_HISTORY_HEADERS.length).setValues([CORRECTION_HISTORY_HEADERS]);
+  } else if (headers.slice(0, CORRECTION_HISTORY_HEADERS.length).join("\t") !== CORRECTION_HISTORY_HEADERS.join("\t")) {
+    throw new Error(`シート「${CORRECTION_HISTORY_SHEET_NAME}」の見出しが補正履歴仕様と一致しません。`);
+  }
+  return sheet;
+}
+
+function appendCorrectionHistory_(corrections) {
+  if (!Array.isArray(corrections) || corrections.length === 0) return 0;
+  const sheet = ensureCorrectionHistorySheet_();
+  const rows = correctionRows_(corrections);
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, CORRECTION_HISTORY_HEADERS.length).setValues(rows);
+  sheet.getRange(startRow, 2, rows.length, 1).setNumberFormat("yyyy/mm/dd hh:mm:ss");
+  return rows.length;
+}
+
+function correctionRows_(corrections) {
+  return corrections.map((event) => [
+    cleanText_(event.id || Utilities.getUuid()),
+    new Date(event.recordedAt || new Date()),
+    cleanText_(event.sourceKind || ""),
+    Number(event.candidateIndex) + 1,
+    cleanText_(event.field || ""),
+    cleanText_(event.beforeValue || ""),
+    cleanText_(event.afterValue || ""),
+    event.dictionaryEligible ? "対象" : "監査のみ",
+  ]);
 }
 
 /**

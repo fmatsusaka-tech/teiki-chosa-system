@@ -14,6 +14,7 @@ type Props = {
 
 export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }: Props) {
   const [candidates, setCandidates] = useState(initialCandidates);
+  const [originalCandidates, setOriginalCandidates] = useState(initialCandidates);
   const [warningsConfirmed, setWarningsConfirmed] = useState(false);
   const [sourceImage, setSourceImage] = useState<{ src: string; name: string } | null>(null);
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
@@ -25,7 +26,10 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
     const stored = sessionStorage.getItem("ocr-review-candidates");
     if (!stored) return;
     const parsed = surveyParseCandidateSchema.array().safeParse(JSON.parse(stored));
-    if (parsed.success) setCandidates(parsed.data);
+    if (parsed.success) {
+      setCandidates(parsed.data);
+      setOriginalCandidates(parsed.data);
+    }
     const preview = sessionStorage.getItem(REVIEW_IMAGE_PREVIEW_KEY);
     if (preview) setSourceImage({ src: preview, name: sessionStorage.getItem(REVIEW_IMAGE_NAME_KEY) || "選択した画像" });
   }, []);
@@ -46,7 +50,7 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
     try {
       const response = await fetch("/api/survey-records", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ candidates, warningsConfirmed: true, sourceKind: sessionStorage.getItem("ocr-review-source-kind") || "photo" }),
+        body: JSON.stringify({ candidates, originalCandidates, warningsConfirmed: true, sourceKind: sessionStorage.getItem("ocr-review-source-kind") || "photo" }),
       });
       const payload = await response.json() as { savedCount?: number; error?: string };
       if (!response.ok) throw new Error(payload.error || "保存に失敗しました。");

@@ -25,6 +25,7 @@ describe("surveyRecordsRequestSchema", () => {
     });
 
     expect(result.sourceKind).toBe("handwritten");
+    expect(result.originalCandidates).toEqual([]);
   });
 
   it("continues to reject unknown input sources", () => {
