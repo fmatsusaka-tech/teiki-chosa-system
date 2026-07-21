@@ -38,11 +38,12 @@ class PaddleOcrSidecarTest(unittest.TestCase):
             "boundingBox": {"x": 1.0, "y": 2.0, "width": 10.0, "height": 5.0},
         })
 
+    @patch("app.recognize_handwritten_orientations")
     @patch("app.prepare_image")
     @patch("app.get_ocr")
-    def test_handwritten_source_is_preprocessed(self, get_ocr, prepare_image) -> None:
+    def test_handwritten_source_is_preprocessed(self, get_ocr, prepare_image, recognize_orientations) -> None:
         prepare_image.return_value = "enhanced-image"
-        get_ocr.return_value.ocr.return_value = []
+        recognize_orientations.return_value = []
 
         response = self.client.post("/ocr", json={
             "imageBase64": base64.b64encode(b"image").decode(),
@@ -53,6 +54,34 @@ class PaddleOcrSidecarTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(prepare_image.call_args.args[1], "handwritten")
+        recognize_orientations.assert_called_once_with(get_ocr.return_value, "enhanced-image")
+
+    @patch("cv2.rotate")
+    def test_handwritten_orientation_uses_highest_text_score(self, rotate) -> None:
+        from app import recognize_handwritten_orientations
+
+        rotate.side_effect = ["clockwise", "upside-down", "counterclockwise"]
+        weak = [[[[[0, 0], [1, 0], [1, 1], [0, 1]], ("ト", 0.5)]]]
+        strong = [[[[[0, 0], [1, 0], [1, 1], [0, 1]], ("トクダ 39.6 40.2", 0.9)]]]
+        ocr = unittest.mock.Mock()
+        ocr.ocr.side_effect = [weak, strong, weak, weak]
+
+        self.assertIs(recognize_handwritten_orientations(ocr, "original"), strong)
+        self.assertEqual(ocr.ocr.call_count, 4)
+
+    def test_handwritten_fragments_are_grouped_into_spatial_rows(self) -> None:
+        from app import merge_handwritten_rows
+
+        lines = [
+            {"text": "39.6", "confidence": 0.9, "boundingBox": {"x": 100, "y": 12, "width": 20, "height": 10}},
+            {"text": "上中島", "confidence": 0.8, "boundingBox": {"x": 10, "y": 52, "width": 30, "height": 12}},
+            {"text": "トクダ", "confidence": 0.7, "boundingBox": {"x": 10, "y": 10, "width": 30, "height": 12}},
+            {"text": "42.1", "confidence": 0.9, "boundingBox": {"x": 100, "y": 53, "width": 20, "height": 10}},
+        ]
+
+        merged = merge_handwritten_rows(lines)
+
+        self.assertEqual([line["text"] for line in merged], ["トクダ,39.6", "上中島,42.1"])
 
     @patch("app.enhance_image")
     @patch("app.prepare_image")

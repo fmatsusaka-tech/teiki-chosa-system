@@ -102,11 +102,11 @@ function parseInlineSurveyLine(
   const knownOrchard = findMasterName(line, orchardMasters);
   const hasMeasurementLabel = /(?:糖度|糖|酸度|酸)/.test(line);
   const textAfterKnownOrchard = knownOrchard ? line.replace(knownOrchard, "") : line;
-  if (!hasMeasurementLabel && (!knownOrchard || !/\d/.test(textAfterKnownOrchard))) return null;
-
   const leadingFields = line.includes(",")
     ? line.split(",").map((part) => part.trim()).filter(Boolean)
     : line.split(/\s+/).filter(Boolean);
+  const measurementLikeFields = leadingFields.filter((field) => /\d/.test(field));
+  if (!hasMeasurementLabel && (!/\d/.test(textAfterKnownOrchard) || (!knownOrchard && measurementLikeFields.length < 2))) return null;
   const orchard = knownOrchard ?? leadingFields[0] ?? "";
   if (!orchard || numberPattern.test(orchard) || /^(?:糖度|糖|酸度|酸)/.test(orchard)) return null;
 
@@ -138,12 +138,20 @@ function parseInlineSurveyLine(
     if (parsed.warning) warnings.push(parsed.warning);
     return parsed.value;
   });
-  if (parsedDiameters.length > 10) {
-    warnings.push(`横径が${parsedDiameters.length}個あるため、先頭10個を使用します`);
+  const unlabelledSugarAcid = !hasMeasurementLabel && hasSugarAcidPair(diameterTokens);
+  const unlabelledBrixOnly = !hasMeasurementLabel && !unlabelledSugarAcid && hasBrixOnly(diameterTokens);
+  const measurementCount = unlabelledSugarAcid ? 2 : unlabelledBrixOnly ? 1 : 0;
+  const diameterCount = parsedDiameters.length - measurementCount;
+  if (diameterCount > 10) {
+    warnings.push(`横径が${diameterCount}個あるため、先頭10個を使用します`);
   }
-  const diametersMm = parsedDiameters.slice(0, 10);
-  const brix = parseLabelledNumber(line, ["糖度", "糖"]);
-  const acidity = parseLabelledNumber(line, ["酸度", "酸"]);
+  const diametersMm = parsedDiameters.slice(0, Math.max(0, parsedDiameters.length - measurementCount)).slice(0, 10);
+  const brix = unlabelledSugarAcid
+    ? Number(diameterTokens.at(-2))
+    : unlabelledBrixOnly
+      ? Number(diameterTokens.at(-1))
+      : parseLabelledNumber(line, ["糖度", "糖"]);
+  const acidity = unlabelledSugarAcid ? Number(diameterTokens.at(-1)) : parseLabelledNumber(line, ["酸度", "酸"]);
 
   const notes = line
     .split(",")

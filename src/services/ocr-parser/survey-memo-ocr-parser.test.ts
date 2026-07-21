@@ -127,4 +127,33 @@ describe("SurveyMemoOcrParser", () => {
 
     expect(parsed.candidates[0].sourceText).toContain("新園地");
   });
+
+  it("手書き表の複数園地行を別候補へ分け、カタカナ園地名を正規化する", async () => {
+    const parsed = await new SurveyMemoOcrParser().parse({
+      ocrResult: ocrResult(`トクダ,早生,396,402,410,382,7.5,4.0
+上中島,早生,421,435,387,356,408,7.5,4.0`, 0.8, "handwritten"),
+      referenceDate: new Date("2026-07-21T00:00:00.000Z"),
+    });
+
+    expect(parsed.candidates).toHaveLength(2);
+    expect(parsed.candidates[0]).toMatchObject({
+      orchard: "徳田", variety: "早生", diametersMm: [39.6, 40.2, 41, 38.2], brix: 7.5, acidity: 4,
+    });
+    expect(parsed.candidates[1]).toMatchObject({
+      orchard: "上中島", variety: "早生", diametersMm: [42.1, 43.5, 38.7, 35.6, 40.8], brix: 7.5, acidity: 4,
+    });
+  });
+
+  it("新園地を含む手書き表の行を補正可能な候補として残す", async () => {
+    const parsed = await new SurveyMemoOcrParser().parse({
+      ocrResult: ocrResult("国道,フィガロン処理前,早生,419,398,455,7.6", 0.8, "handwritten"),
+      referenceDate: new Date("2026-07-21T00:00:00.000Z"),
+    });
+
+    expect(parsed.candidates).toHaveLength(1);
+    expect(parsed.candidates[0]).toMatchObject({
+      orchard: "国道", variety: "早生", diametersMm: [41.9, 39.8, 45.5], brix: 7.6, acidity: null,
+      notes: "フィガロン処理前",
+    });
+  });
 });

@@ -3,6 +3,7 @@ import binascii
 import os
 import tempfile
 import time
+from statistics import median
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,60 @@ def has_recognized_lines(result: Any) -> bool:
     return any(page for page in (result or []))
 
 
+def recognition_score(result: Any) -> float:
+    score = 0.0
+    for page in result or []:
+        for item in page or []:
+            text, confidence = item[1]
+            meaningful = sum(character.isalnum() for character in str(text))
+            score += meaningful * (float(confidence) if confidence is not None else 0.5)
+    return score
+
+
+def recognize_handwritten_orientations(ocr: Any, image: Any) -> Any:
+    import cv2
+
+    candidates = [
+        image,
+        cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE),
+        cv2.rotate(image, cv2.ROTATE_180),
+        cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE),
+    ]
+    results = [ocr.ocr(candidate, cls=True) for candidate in candidates]
+    return max(results, key=recognition_score)
+
+
+def merge_handwritten_rows(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if len(lines) < 2:
+        return lines
+    threshold = max(12.0, median(line["boundingBox"]["height"] for line in lines) * 0.8)
+    rows: list[list[dict[str, Any]]] = []
+    for line in sorted(lines, key=lambda item: item["boundingBox"]["y"] + item["boundingBox"]["height"] / 2):
+        center = line["boundingBox"]["y"] + line["boundingBox"]["height"] / 2
+        matching_row = next((row for row in rows if abs(center - sum(
+            item["boundingBox"]["y"] + item["boundingBox"]["height"] / 2 for item in row
+        ) / len(row)) <= threshold), None)
+        if matching_row is None:
+            rows.append([line])
+        else:
+            matching_row.append(line)
+
+    merged = []
+    for row in rows:
+        ordered = sorted(row, key=lambda item: item["boundingBox"]["x"])
+        left = min(item["boundingBox"]["x"] for item in ordered)
+        top = min(item["boundingBox"]["y"] for item in ordered)
+        right = max(item["boundingBox"]["x"] + item["boundingBox"]["width"] for item in ordered)
+        bottom = max(item["boundingBox"]["y"] + item["boundingBox"]["height"] for item in ordered)
+        confidences = [item["confidence"] for item in ordered if item["confidence"] is not None]
+        merged.append({
+            "text": ",".join(item["text"] for item in ordered),
+            "confidence": sum(confidences) / len(confidences) if confidences else None,
+            "boundingBox": {"x": left, "y": top, "width": right - left, "height": bottom - top},
+        })
+    return merged
+
+
 def get_ocr() -> Any:
     global _ocr
     if _ocr is None:
@@ -76,7 +131,8 @@ def recognize(request: OcrRequest) -> dict[str, Any]:
             image_file.write(image)
             image_path = Path(image_file.name)
         ocr = get_ocr()
-        result = ocr.ocr(prepare_image(image_path, request.sourceKind), cls=True)
+        prepared_image = prepare_image(image_path, request.sourceKind)
+        result = recognize_handwritten_orientations(ocr, prepared_image) if request.sourceKind == "handwritten" else ocr.ocr(prepared_image, cls=True)
         # Smartphone memo screenshots often use low-contrast gray text. Keep the
         # normal path fast, but retry once with contrast enhancement when it found nothing.
         if request.sourceKind == "screenshot" and not has_recognized_lines(result):
@@ -104,6 +160,8 @@ def recognize(request: OcrRequest) -> dict[str, Any]:
                     "height": max(ys) - min(ys),
                 },
             })
+    if request.sourceKind == "handwritten":
+        lines = merge_handwritten_rows(lines)
     return {
         "lines": lines,
         "elapsedMs": round((time.perf_counter() - started) * 1000, 3),

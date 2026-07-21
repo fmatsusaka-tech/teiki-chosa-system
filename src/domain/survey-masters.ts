@@ -12,7 +12,7 @@ export const orchardMasters: readonly SurveyMasterItem[] = [
   { id: "naru-2", canonicalName: "なる2", aliases: ["なる２"], isActive: true },
   { id: "kaminakajima", canonicalName: "上中島", aliases: [], isActive: true },
   { id: "shimo-machi", canonicalName: "下町", aliases: [], isActive: true },
-  { id: "tokuda", canonicalName: "徳田", aliases: [], isActive: true },
+  { id: "tokuda", canonicalName: "徳田", aliases: ["トクダ", "トクタ"], isActive: true },
 ];
 
 export const varietyMasters: readonly SurveyMasterItem[] = [
