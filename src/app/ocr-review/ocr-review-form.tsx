@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { surveyParseCandidateSchema, type SurveyParseCandidate } from "../../services/ocr-parser";
 import { parseOptionalDiameters, parseOptionalNumber, validateReviewCandidate } from "./review-form";
@@ -112,7 +113,10 @@ export function OcrReviewForm({ initialCandidates, orchardNames, varietyNames }:
       })}
       {hasWarnings && <label className="warning-confirm"><input type="checkbox" checked={warningsConfirmed} disabled={status.kind === "saving" || status.kind === "success"} onChange={(event) => setWarningsConfirmed(event.target.checked)} />警告と判別できなかった文字を確認しました</label>}
       {status.kind !== "idle" && <p className={status.kind === "error" ? "review-error" : "review-complete"} role="status">{status.message}{status.kind === "error" ? " 入力内容は保持されています。" : ""}</p>}
-      <button className="review-submit" type="submit" disabled={hasErrors || (hasWarnings && !warningsConfirmed) || status.kind === "saving" || status.kind === "success"}>{status.kind === "saving" ? "保存中…" : "調査原票へ保存"}</button>
+      <div className="review-actions">
+        <Link className="review-home" href="/">ホームへ戻る</Link>
+        <button className="review-submit" type="submit" disabled={hasErrors || (hasWarnings && !warningsConfirmed) || status.kind === "saving" || status.kind === "success"}>{status.kind === "saving" ? "保存中…" : "調査原票へ保存"}</button>
+      </div>
     </form>
   );
 }
